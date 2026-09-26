@@ -24,35 +24,37 @@ class _HomeScreenState extends State<HomeScreen> {
   ];
 
   Widget _page() => switch (_tab) {
-        0 => const PantryScreen(),
-        1 => const ShoppingScreen(),
-        2 => ScanScreen(active: _tab == 2),
-        3 => const ProductsScreen(),
-        _ => const SettingsScreen(),
-      };
+    0 => const PantryScreen(),
+    1 => const ShoppingScreen(),
+    2 => ScanScreen(active: _tab == 2),
+    3 => const ProductsScreen(),
+    _ => const SettingsScreen(),
+  };
 
   @override
   Widget build(BuildContext context) {
     final wide = MediaQuery.sizeOf(context).width >= 720;
     if (wide) {
       return Scaffold(
-        body: Row(children: [
-          NavigationRail(
-            selectedIndex: _tab,
-            onDestinationSelected: (i) => setState(() => _tab = i),
-            labelType: NavigationRailLabelType.all,
-            leading: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Icon(Icons.house_rounded, color: Theme.of(context).colorScheme.primary, size: 32),
+        body: Row(
+          children: [
+            NavigationRail(
+              selectedIndex: _tab,
+              onDestinationSelected: (i) => setState(() => _tab = i),
+              labelType: NavigationRailLabelType.all,
+              leading: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Icon(Icons.house_rounded, color: Theme.of(context).colorScheme.primary, size: 32),
+              ),
+              destinations: [
+                for (final d in _destinations)
+                  NavigationRailDestination(icon: Icon(d.$1), selectedIcon: Icon(d.$2), label: Text(d.$3)),
+              ],
             ),
-            destinations: [
-              for (final d in _destinations)
-                NavigationRailDestination(icon: Icon(d.$1), selectedIcon: Icon(d.$2), label: Text(d.$3)),
-            ],
-          ),
-          const VerticalDivider(width: 1),
-          Expanded(child: _page()),
-        ]),
+            const VerticalDivider(width: 1),
+            Expanded(child: _page()),
+          ],
+        ),
       );
     }
     return Scaffold(

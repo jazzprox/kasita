@@ -28,11 +28,11 @@ class ExpiryChip extends StatelessWidget {
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(12),
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(12)),
+      child: Text(
+        label,
+        style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600),
       ),
-      child: Text(label, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600)),
     );
   }
 }
@@ -63,11 +63,9 @@ void toast(BuildContext context, String msg, {bool error = false}) {
   final cs = Theme.of(context).colorScheme;
   ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
-    ..showSnackBar(SnackBar(
-      content: Text(msg),
-      backgroundColor: error ? cs.error : null,
-      behavior: SnackBarBehavior.floating,
-    ));
+    ..showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: error ? cs.error : null, behavior: SnackBarBehavior.floating),
+    );
 }
 
 class EmptyState extends StatelessWidget {
@@ -81,13 +79,20 @@ class EmptyState extends StatelessWidget {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Icon(icon, size: 56, color: t.colorScheme.outline),
-          const SizedBox(height: 12),
-          Text(title, style: t.textTheme.titleMedium),
-          const SizedBox(height: 4),
-          Text(message, textAlign: TextAlign.center, style: TextStyle(color: t.colorScheme.onSurfaceVariant)),
-        ]),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 56, color: t.colorScheme.outline),
+            const SizedBox(height: 12),
+            Text(title, style: t.textTheme.titleMedium),
+            const SizedBox(height: 4),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: t.colorScheme.onSurfaceVariant),
+            ),
+          ],
+        ),
       ),
     );
   }

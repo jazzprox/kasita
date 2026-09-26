@@ -221,6 +221,7 @@ class Receipt(Base):
     purchased_on: Mapped[date | None] = mapped_column(Date)
     total: Mapped[Decimal | None] = mapped_column(Money)
     currency: Mapped[str | None] = mapped_column(String(3))
+    store_name: Mapped[str | None] = mapped_column(String(120))  # as printed, before it is matched to a Store
     image_path: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(16), default="new")  # new | parsed | confirmed | failed
     error: Mapped[str | None] = mapped_column(Text)
@@ -239,11 +240,13 @@ class ReceiptLine(Base):
     receipt_id: Mapped[str] = mapped_column(ForeignKey("receipts.id", ondelete="CASCADE"), index=True)
     position: Mapped[int]
     raw_text: Mapped[str] = mapped_column(String(255))  # exactly as printed, e.g. "GSC TOILET PPR 12R"
+    name: Mapped[str | None] = mapped_column(String(255))  # readable, e.g. "Toilet paper 12 rolls"
     quantity: Mapped[Decimal] = mapped_column(Qty, default=1)
     unit_price: Mapped[Decimal | None] = mapped_column(Money)
     line_total: Mapped[Decimal | None] = mapped_column(Money)
     product_id: Mapped[str | None] = mapped_column(ForeignKey("products.id", ondelete="SET NULL"))
     skip: Mapped[bool] = mapped_column(Boolean, default=False)  # not a stock item (bag fee, deposit...)
+    matched_by: Mapped[str | None] = mapped_column(String(8))  # alias | guess | user
 
     receipt: Mapped[Receipt] = relationship(back_populates="lines")
 

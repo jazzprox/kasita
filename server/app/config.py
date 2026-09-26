@@ -16,6 +16,11 @@ class Settings(BaseSettings):
     # how long a barcode lookup result (found or not found) is trusted before asking again
     barcode_cache_days: int = 30
     upload_dir: str = "./uploads"
+    # run Alembic migrations on startup
+    auto_migrate: bool = True
+    # receipts: longest side of the stored/sent photo, and the ChatGPT models to prefer (first available wins)
+    receipt_max_px: int = 2400
+    chatgpt_models: str = "gpt-5.6-sol,gpt-5.6,gpt-5.5,gpt-5.4,gpt-5.4-mini"
     # Flutter web build to serve at /, if present
     web_dir: str = "./web"
 

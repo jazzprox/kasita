@@ -246,3 +246,91 @@ class ShoppingOut(ORM):
     auto: bool
     done: bool
     created_at: datetime
+
+
+# --- receipts -------------------------------------------------------------------
+class ReceiptLineOut(ORM):
+    id: str
+    position: int
+    raw_text: str
+    name: str | None
+    quantity: Decimal
+    unit_price: Decimal | None
+    line_total: Decimal | None
+    product_id: str | None
+    product_name: str | None = None
+    skip: bool
+    matched_by: str | None
+
+
+class ReceiptOut(BaseModel):
+    id: str
+    status: str  # new | parsed | confirmed | failed
+    error: str | None
+    store_id: str | None
+    store_name: str | None
+    purchased_on: date | None
+    total: Decimal | None
+    currency: str | None
+    created_at: datetime
+    line_count: int = 0
+    lines_total: Decimal | None = None  # sum of the lines, to compare with `total`
+    lines: list[ReceiptLineOut] | None = None
+
+
+class ReceiptPatch(BaseModel):
+    store_id: str | None = None
+    purchased_on: date | None = None
+    total: Decimal | None = None
+
+
+class ReceiptLineIn(BaseModel):
+    raw_text: str = Field(min_length=1, max_length=255)
+    name: str | None = None
+    quantity: Decimal = Field(default=Decimal(1), gt=0)
+    unit_price: Decimal | None = Field(default=None, ge=0)
+    line_total: Decimal | None = None
+    product_id: str | None = None
+    skip: bool = False
+
+
+class ReceiptLinePatch(BaseModel):
+    name: str | None = None
+    quantity: Decimal | None = Field(default=None, gt=0)
+    unit_price: Decimal | None = Field(default=None, ge=0)
+    line_total: Decimal | None = None
+    product_id: str | None = None
+    clear_product: bool = False  # unlink the product (a new one is created on confirm)
+    skip: bool | None = None
+
+
+class ConfirmIn(BaseModel):
+    create_missing: bool = True  # lines without a product become new products
+    location_id: str | None = None
+
+
+class ConfirmOut(BaseModel):
+    added: int
+    created_products: int
+    skipped: int
+
+
+# --- integrations ---------------------------------------------------------------
+class DeviceCodeOut(BaseModel):
+    user_code: str
+    verification_url: str
+    interval: int
+    expires_at: int
+
+
+class ChatGPTStatus(BaseModel):
+    connected: bool
+    email: str | None = None
+    plan: str | None = None
+    model: str | None = None
+    connected_at: int | None = None
+    pending: DeviceCodeOut | None = None
+
+
+class ModelIn(BaseModel):
+    model: str = Field(min_length=1, max_length=80)

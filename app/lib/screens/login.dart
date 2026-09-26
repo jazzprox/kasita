@@ -49,7 +49,11 @@ class _LoginScreenState extends State<LoginScreen> {
       s.api.server = _server.text.trim();
       if (_joining) {
         await s.api.acceptInvite(
-            token: _tokenFrom(_invite.text), email: _email.text.trim(), name: _name.text.trim(), password: _password.text);
+          token: _tokenFrom(_invite.text),
+          email: _email.text.trim(),
+          name: _name.text.trim(),
+          password: _password.text,
+        );
       } else {
         await s.api.login(_email.text.trim(), _password.text);
       }
@@ -91,13 +95,15 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 16),
                   if (_joining) ...[
                     TextField(
-                        controller: _invite,
-                        decoration: const InputDecoration(labelText: 'Invite link or code', border: OutlineInputBorder())),
+                      controller: _invite,
+                      decoration: const InputDecoration(labelText: 'Invite link or code', border: OutlineInputBorder()),
+                    ),
                     const SizedBox(height: 12),
                     TextField(
-                        controller: _name,
-                        textCapitalization: TextCapitalization.words,
-                        decoration: const InputDecoration(labelText: 'Your name', border: OutlineInputBorder())),
+                      controller: _name,
+                      textCapitalization: TextCapitalization.words,
+                      decoration: const InputDecoration(labelText: 'Your name', border: OutlineInputBorder()),
+                    ),
                     const SizedBox(height: 12),
                   ],
                   TextField(
@@ -113,15 +119,17 @@ class _LoginScreenState extends State<LoginScreen> {
                     autofillHints: [_joining ? AutofillHints.newPassword : AutofillHints.password],
                     onSubmitted: (_) => _submit(),
                     decoration: InputDecoration(
-                        labelText: _joining ? 'Password (at least 10 characters)' : 'Password',
-                        border: const OutlineInputBorder()),
+                      labelText: _joining ? 'Password (at least 10 characters)' : 'Password',
+                      border: const OutlineInputBorder(),
+                    ),
                   ),
                   if (!kIsWeb) ...[
                     const SizedBox(height: 12),
                     TextField(
-                        controller: _server,
-                        keyboardType: TextInputType.url,
-                        decoration: const InputDecoration(labelText: 'Server', border: OutlineInputBorder())),
+                      controller: _server,
+                      keyboardType: TextInputType.url,
+                      decoration: const InputDecoration(labelText: 'Server', border: OutlineInputBorder()),
+                    ),
                   ],
                   if (_error != null) ...[
                     const SizedBox(height: 12),
@@ -161,30 +169,36 @@ class _NoHouseholdScreenState extends State<NoHouseholdScreen> {
   Widget build(BuildContext context) {
     final s = Kasita.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Kasita'), actions: [
-        IconButton(icon: const Icon(Icons.logout), tooltip: 'Sign out', onPressed: s.signOut),
-      ]),
+      appBar: AppBar(
+        title: const Text('Kasita'),
+        actions: [IconButton(icon: const Icon(Icons.logout), tooltip: 'Sign out', onPressed: s.signOut)],
+      ),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 420),
           child: Padding(
             padding: const EdgeInsets.all(24),
-            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              const Text('You are not in a household yet. Create one, or ask someone to send you an invite.'),
-              const SizedBox(height: 16),
-              TextField(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text('You are not in a household yet. Create one, or ask someone to send you an invite.'),
+                const SizedBox(height: 16),
+                TextField(
                   controller: _name,
-                  decoration: const InputDecoration(labelText: 'Household name', border: OutlineInputBorder())),
-              const SizedBox(height: 12),
-              FilledButton(
-                onPressed: () async {
-                  if (_name.text.trim().isEmpty) return;
-                  await s.api.createHousehold(_name.text.trim());
-                  await s.loadHouseholds();
-                },
-                child: const Text('Create household'),
-              ),
-            ]),
+                  decoration: const InputDecoration(labelText: 'Household name', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 12),
+                FilledButton(
+                  onPressed: () async {
+                    if (_name.text.trim().isEmpty) return;
+                    await s.api.createHousehold(_name.text.trim());
+                    await s.loadHouseholds();
+                  },
+                  child: const Text('Create household'),
+                ),
+              ],
+            ),
           ),
         ),
       ),

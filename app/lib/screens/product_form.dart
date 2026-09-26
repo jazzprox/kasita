@@ -66,75 +66,95 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       appBar: AppBar(title: Text(_editing ? 'Edit product' : 'New product')),
       body: Form(
         key: _form,
-        child: ListView(padding: const EdgeInsets.all(16), children: [
-          if (pre != null)
-            Card(
-              child: ListTile(
-                leading: ProductThumb(pre.imageUrl),
-                title: Text('Barcode ${pre.barcode}'),
-                subtitle: Text(pre.found
-                    ? 'Found in ${pre.source}${pre.quantityText == null ? "" : " · ${pre.quantityText}"}'
-                    : 'Not in any product database: name it once and Kasita remembers it.'),
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            if (pre != null)
+              Card(
+                child: ListTile(
+                  leading: ProductThumb(pre.imageUrl),
+                  title: Text('Barcode ${pre.barcode}'),
+                  subtitle: Text(
+                    pre.found
+                        ? 'Found in ${pre.source}${pre.quantityText == null ? "" : " · ${pre.quantityText}"}'
+                        : 'Not in any product database: name it once and Kasita remembers it.',
+                  ),
+                ),
               ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _name,
+              autofocus: pre != null && !pre.found,
+              textCapitalization: TextCapitalization.sentences,
+              validator: (v) => (v == null || v.trim().isEmpty) ? 'Give it a name' : null,
+              decoration: const InputDecoration(labelText: 'Name', border: OutlineInputBorder()),
             ),
-          const SizedBox(height: 12),
-          TextFormField(
-            controller: _name,
-            autofocus: pre != null && !pre.found,
-            textCapitalization: TextCapitalization.sentences,
-            validator: (v) => (v == null || v.trim().isEmpty) ? 'Give it a name' : null,
-            decoration: const InputDecoration(labelText: 'Name', border: OutlineInputBorder()),
-          ),
-          const SizedBox(height: 12),
-          TextFormField(
-              controller: _brand, decoration: const InputDecoration(labelText: 'Brand', border: OutlineInputBorder())),
-          const SizedBox(height: 12),
-          TextFormField(
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _brand,
+              decoration: const InputDecoration(labelText: 'Brand', border: OutlineInputBorder()),
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
               controller: _category,
-              decoration: const InputDecoration(labelText: 'Category (e.g. Dairy)', border: OutlineInputBorder())),
-          const SizedBox(height: 12),
-          Row(children: [
-            Expanded(
-              child: TextFormField(
-                  controller: _unit,
-                  decoration: const InputDecoration(labelText: 'Counted in (pcs, pack, kg)', border: OutlineInputBorder())),
+              decoration: const InputDecoration(labelText: 'Category (e.g. Dairy)', border: OutlineInputBorder()),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: TextFormField(
-                controller: _min,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(
-                    labelText: 'Keep at least', helperText: 'Below this: onto the list', border: OutlineInputBorder()),
-              ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _unit,
+                    decoration: const InputDecoration(
+                      labelText: 'Counted in (pcs, pack, kg)',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextFormField(
+                    controller: _min,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                      labelText: 'Keep at least',
+                      helperText: 'Below this: onto the list',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ]),
-          const SizedBox(height: 12),
-          TextFormField(
-            controller: _shelf,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _shelf,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
                 labelText: 'Usually keeps for (days)',
                 helperText: 'Pre-fills the best-before date when you buy it',
-                border: OutlineInputBorder()),
-          ),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String?>(
-            initialValue: _location,
-            decoration: const InputDecoration(labelText: 'Usually stored in', border: OutlineInputBorder()),
-            items: [
-              const DropdownMenuItem(value: null, child: Text('—')),
-              for (final l in s.locations) DropdownMenuItem(value: l.id, child: Text(l.name)),
-            ],
-            onChanged: (v) => setState(() => _location = v),
-          ),
-          const SizedBox(height: 24),
-          FilledButton(
-            onPressed: _busy ? null : _save,
-            child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12), child: Text(_editing ? 'Save' : 'Create product')),
-          ),
-        ]),
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String?>(
+              initialValue: _location,
+              decoration: const InputDecoration(labelText: 'Usually stored in', border: OutlineInputBorder()),
+              items: [
+                const DropdownMenuItem(value: null, child: Text('—')),
+                for (final l in s.locations) DropdownMenuItem(value: l.id, child: Text(l.name)),
+              ],
+              onChanged: (v) => setState(() => _location = v),
+            ),
+            const SizedBox(height: 24),
+            FilledButton(
+              onPressed: _busy ? null : _save,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Text(_editing ? 'Save' : 'Create product'),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

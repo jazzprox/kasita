@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
@@ -31,7 +32,8 @@ class Api {
     _refresh = await _storage.read(key: 'refresh');
   }
 
-  Uri _u(String path, [Map<String, String>? q]) => Uri.parse('${server.replaceAll(RegExp(r'/+$'), '')}$path').replace(queryParameters: q);
+  Uri _u(String path, [Map<String, String>? q]) =>
+      Uri.parse('${server.replaceAll(RegExp(r'/+$'), '')}$path').replace(queryParameters: q);
 
   Future<void> _saveTokens(Map<String, dynamic> t) async {
     _access = t['access_token'];
@@ -41,16 +43,25 @@ class Api {
   }
 
   Future<void> login(String email, String password) async {
-    final r = await http.post(_u('/api/auth/login'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'email': email, 'password': password, 'device': 'kasita-app'}));
+    final r = await http.post(
+      _u('/api/auth/login'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'email': email, 'password': password, 'device': 'kasita-app'}),
+    );
     await _saveTokens(_decode(r));
   }
 
-  Future<void> acceptInvite({required String token, required String email, String? name, required String password}) async {
-    final r = await http.post(_u('/api/auth/accept-invite'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'token': token, 'email': email, 'name': name, 'password': password}));
+  Future<void> acceptInvite({
+    required String token,
+    required String email,
+    String? name,
+    required String password,
+  }) async {
+    final r = await http.post(
+      _u('/api/auth/accept-invite'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'token': token, 'email': email, 'name': name, 'password': password}),
+    );
     await _saveTokens(_decode(r));
   }
 
@@ -61,16 +72,22 @@ class Api {
     await _storage.delete(key: 'refresh');
     if (refresh != null) {
       try {
-        await http.post(_u('/api/auth/logout'),
-            headers: {'Content-Type': 'application/json'}, body: jsonEncode({'refresh_token': refresh}));
+        await http.post(
+          _u('/api/auth/logout'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'refresh_token': refresh}),
+        );
       } catch (_) {}
     }
   }
 
   Future<bool> _renew() async {
     if (_refresh == null) return false;
-    final r = await http.post(_u('/api/auth/refresh'),
-        headers: {'Content-Type': 'application/json'}, body: jsonEncode({'refresh_token': _refresh}));
+    final r = await http.post(
+      _u('/api/auth/refresh'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'refresh_token': _refresh}),
+    );
     if (r.statusCode != 200) {
       await logout();
       onSignedOut?.call();
@@ -85,7 +102,9 @@ class Api {
     final body = r.body.isEmpty ? null : jsonDecode(utf8.decode(r.bodyBytes));
     if (r.statusCode >= 400) {
       final detail = body is Map ? body['detail'] : null;
-      final msg = detail is String ? detail : (detail is List && detail.isNotEmpty ? detail.first['msg'] : 'Error ${r.statusCode}');
+      final msg = detail is String
+          ? detail
+          : (detail is List && detail.isNotEmpty ? detail.first['msg'] : 'Error ${r.statusCode}');
       throw ApiException(r.statusCode, msg.toString());
     }
     return body;
@@ -106,6 +125,32 @@ class Api {
     var r = await go();
     if (r.statusCode == 401 && await _renew()) r = await go();
     return _decode(r);
+  }
+
+  /// Multipart upload of one file under the form field `file`.
+  Future<dynamic> upload(String path, Uint8List bytes, String filename) async {
+    Future<http.Response> go() async {
+      final req = http.MultipartRequest('POST', _u(path));
+      if (_access != null) req.headers['Authorization'] = 'Bearer $_access';
+      req.files.add(http.MultipartFile.fromBytes('file', bytes, filename: filename));
+      return http.Response.fromStream(await _http.send(req));
+    }
+
+    if (_access == null && !await _renew()) throw ApiException(401, 'Signed out');
+    var r = await go();
+    if (r.statusCode == 401 && await _renew()) r = await go();
+    return _decode(r);
+  }
+
+  /// Raw bytes of an authenticated resource (receipt photos).
+  Future<Uint8List> bytes(String path) async {
+    Future<http.Response> go() =>
+        _http.get(_u(path), headers: {if (_access != null) 'Authorization': 'Bearer $_access'});
+    if (_access == null && !await _renew()) throw ApiException(401, 'Signed out');
+    var r = await go();
+    if (r.statusCode == 401 && await _renew()) r = await go();
+    if (r.statusCode >= 400) _decode(r);
+    return r.bodyBytes;
   }
 
   Future<dynamic> get(String p, [Map<String, String>? q]) => _send('GET', p, query: q);
@@ -146,7 +191,9 @@ class Api {
 
   Future<void> purchase(String hid, Map<String, dynamic> body) => post('${_h(hid)}/stock/purchase', body);
   Future<Map<String, dynamic>> consume(String hid, String pid, double qty, {bool spoiled = false}) async =>
-      Map<String, dynamic>.from(await post('${_h(hid)}/stock/consume', {'product_id': pid, 'quantity': qty, 'spoiled': spoiled}));
+      Map<String, dynamic>.from(
+        await post('${_h(hid)}/stock/consume', {'product_id': pid, 'quantity': qty, 'spoiled': spoiled}),
+      );
   Future<void> openPack(String hid, String pid) => post('${_h(hid)}/stock/open', {'product_id': pid});
 
   Future<List<ShoppingItem>> shopping(String hid, {bool includeDone = false}) async =>
@@ -164,4 +211,35 @@ class Api {
       (await get('${_h(hid)}/members') as List).map((e) => Member.fromJson(e)).toList();
   Future<Map<String, dynamic>> createInvite(String hid) async =>
       Map<String, dynamic>.from(await post('${_h(hid)}/invites'));
+
+  // --- receipts -----------------------------------------------------------
+  Future<List<Receipt>> receipts(String hid) async =>
+      (await get('${_h(hid)}/receipts') as List).map((e) => Receipt.fromJson(e)).toList();
+  Future<Receipt> receipt(String hid, String id) async => Receipt.fromJson(await get('${_h(hid)}/receipts/$id'));
+  Future<Receipt> uploadReceipt(String hid, Uint8List photo, String filename) async =>
+      Receipt.fromJson(await upload('${_h(hid)}/receipts', photo, filename));
+  Future<Uint8List> receiptImage(String hid, String id) => bytes('${_h(hid)}/receipts/$id/image');
+  Future<Receipt> reparseReceipt(String hid, String id) async =>
+      Receipt.fromJson(await post('${_h(hid)}/receipts/$id/parse'));
+  Future<Receipt> updateReceipt(String hid, String id, Map<String, dynamic> body) async =>
+      Receipt.fromJson(await patch('${_h(hid)}/receipts/$id', body));
+  Future<void> updateReceiptLine(String hid, String id, String lineId, Map<String, dynamic> body) =>
+      patch('${_h(hid)}/receipts/$id/lines/$lineId', body);
+  Future<void> addReceiptLine(String hid, String id, Map<String, dynamic> body) =>
+      post('${_h(hid)}/receipts/$id/lines', body);
+  Future<void> deleteReceiptLine(String hid, String id, String lineId) =>
+      delete('${_h(hid)}/receipts/$id/lines/$lineId');
+  Future<Map<String, dynamic>> confirmReceipt(String hid, String id, {String? locationId}) async =>
+      Map<String, dynamic>.from(await post('${_h(hid)}/receipts/$id/confirm', {'location_id': locationId}));
+  Future<void> deleteReceipt(String hid, String id) => delete('${_h(hid)}/receipts/$id');
+
+  // --- ChatGPT (reads receipts) --------------------------------------------
+  String _gpt(String hid) => '${_h(hid)}/integrations/chatgpt';
+  Future<ChatGPTStatus> chatgpt(String hid) async => ChatGPTStatus.fromJson(await get(_gpt(hid)));
+  Future<ChatGPTStatus> chatgptConnect(String hid) async => ChatGPTStatus.fromJson(await post('${_gpt(hid)}/connect'));
+  Future<ChatGPTStatus> chatgptPoll(String hid) async => ChatGPTStatus.fromJson(await post('${_gpt(hid)}/poll'));
+  Future<List<String>> chatgptModels(String hid) async => List<String>.from(await get('${_gpt(hid)}/models'));
+  Future<ChatGPTStatus> chatgptSetModel(String hid, String model) async =>
+      ChatGPTStatus.fromJson(await patch(_gpt(hid), {'model': model}));
+  Future<void> chatgptDisconnect(String hid) => delete(_gpt(hid));
 }

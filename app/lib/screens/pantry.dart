@@ -41,30 +41,35 @@ class _PantryScreenState extends State<PantryScreen> {
           final all = snap.data!
               .where((s) => _q.isEmpty || s.product.name.toLowerCase().contains(_q.toLowerCase()))
               .toList();
-          final soon = all.where((s) => s.product.nextBestBefore != null && daysUntil(s.product.nextBestBefore!) <= 5).toList();
+          final soon = all
+              .where((s) => s.product.nextBestBefore != null && daysUntil(s.product.nextBestBefore!) <= 5)
+              .toList();
           final rest = all.where((s) => !soon.contains(s)).toList();
           return RefreshIndicator(
             onRefresh: () async => setState(_load),
-            child: ListView(children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                child: SearchBar(
-                  hintText: 'Search pantry',
-                  leading: const Icon(Icons.search),
-                  onChanged: (v) => setState(() => _q = v),
+            child: ListView(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                  child: SearchBar(
+                    hintText: 'Search pantry',
+                    leading: const Icon(Icons.search),
+                    onChanged: (v) => setState(() => _q = v),
+                  ),
                 ),
-              ),
-              if (snap.data!.isEmpty)
-                const EmptyState(
+                if (snap.data!.isEmpty)
+                  const EmptyState(
                     icon: Icons.kitchen_outlined,
                     title: 'Nothing in the pantry yet',
-                    message: 'Scan a barcode or open Products to add what you have at home.'),
-              if (soon.isNotEmpty) _header(context, 'Use soon', Icons.schedule),
-              for (final s in soon) _tile(context, s),
-              if (rest.isNotEmpty && soon.isNotEmpty) _header(context, 'Everything else', Icons.kitchen_outlined),
-              for (final s in rest) _tile(context, s),
-              const SizedBox(height: 80),
-            ]),
+                    message: 'Scan a barcode or open Products to add what you have at home.',
+                  ),
+                if (soon.isNotEmpty) _header(context, 'Use soon', Icons.schedule),
+                for (final s in soon) _tile(context, s),
+                if (rest.isNotEmpty && soon.isNotEmpty) _header(context, 'Everything else', Icons.kitchen_outlined),
+                for (final s in rest) _tile(context, s),
+                const SizedBox(height: 80),
+              ],
+            ),
           );
         },
       ),
@@ -72,13 +77,15 @@ class _PantryScreenState extends State<PantryScreen> {
   }
 
   Widget _header(BuildContext context, String text, IconData icon) => Padding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-        child: Row(children: [
-          Icon(icon, size: 18, color: Theme.of(context).colorScheme.primary),
-          const SizedBox(width: 8),
-          Text(text, style: Theme.of(context).textTheme.titleSmall),
-        ]),
-      );
+    padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+    child: Row(
+      children: [
+        Icon(icon, size: 18, color: Theme.of(context).colorScheme.primary),
+        const SizedBox(width: 8),
+        Text(text, style: Theme.of(context).textTheme.titleSmall),
+      ],
+    ),
+  );
 
   Widget _tile(BuildContext context, StockProduct s) {
     final p = s.product;
@@ -86,24 +93,28 @@ class _PantryScreenState extends State<PantryScreen> {
     return ListTile(
       leading: ProductThumb(p.imageUrl),
       title: Text(p.name),
-      subtitle: Row(children: [
-        Text('${fmtQty(s.total)} ${p.unit}'),
-        if (opened) ...[const SizedBox(width: 8), const Text('· opened')],
-        if (p.minStock > 0 && s.total < p.minStock) ...[
-          const SizedBox(width: 8),
-          Text('· low', style: TextStyle(color: Theme.of(context).colorScheme.error)),
+      subtitle: Row(
+        children: [
+          Text('${fmtQty(s.total)} ${p.unit}'),
+          if (opened) ...[const SizedBox(width: 8), const Text('· opened')],
+          if (p.minStock > 0 && s.total < p.minStock) ...[
+            const SizedBox(width: 8),
+            Text('· low', style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          ],
         ],
-      ]),
-      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-        ExpiryChip(p.nextBestBefore),
-        IconButton(
-          tooltip: 'Used one',
-          icon: const Icon(Icons.remove_circle_outline),
-          onPressed: () => consumeOne(context, p),
-        ),
-      ]),
-      onTap: () => Navigator.of(context)
-          .push(MaterialPageRoute(builder: (_) => ProductDetailScreen(productId: p.id))),
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ExpiryChip(p.nextBestBefore),
+          IconButton(
+            tooltip: 'Used one',
+            icon: const Icon(Icons.remove_circle_outline),
+            onPressed: () => consumeOne(context, p),
+          ),
+        ],
+      ),
+      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => ProductDetailScreen(productId: p.id))),
     );
   }
 }

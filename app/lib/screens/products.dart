@@ -48,28 +48,35 @@ class _ProductsScreenState extends State<ProductsScreen> {
       ),
       body: _all == null
           ? const Center(child: CircularProgressIndicator())
-          : ListView(children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                child: SearchBar(
-                    hintText: 'Search products', leading: const Icon(Icons.search), onChanged: (v) => setState(() => _q = v)),
-              ),
-              if (_all!.isEmpty)
-                const EmptyState(
+          : ListView(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                  child: SearchBar(
+                    hintText: 'Search products',
+                    leading: const Icon(Icons.search),
+                    onChanged: (v) => setState(() => _q = v),
+                  ),
+                ),
+                if (_all!.isEmpty)
+                  const EmptyState(
                     icon: Icons.inventory_2_outlined,
                     title: 'No products yet',
-                    message: 'Scanning a barcode creates the product for you.'),
-              for (final p in list)
-                ListTile(
-                  leading: ProductThumb(p.imageUrl),
-                  title: Text(p.name),
-                  subtitle: Text([p.brand, p.category].whereType<String>().join(' · ')),
-                  trailing: Text(p.inStock > 0 ? '${fmtQty(p.inStock)} ${p.unit}' : '—'),
-                  onTap: () => Navigator.of(context)
-                      .push(MaterialPageRoute(builder: (_) => ProductDetailScreen(productId: p.id))),
-                ),
-              const SizedBox(height: 96),
-            ]),
+                    message: 'Scanning a barcode creates the product for you.',
+                  ),
+                for (final p in list)
+                  ListTile(
+                    leading: ProductThumb(p.imageUrl),
+                    title: Text(p.name),
+                    subtitle: Text([p.brand, p.category].whereType<String>().join(' · ')),
+                    trailing: Text(p.inStock > 0 ? '${fmtQty(p.inStock)} ${p.unit}' : '—'),
+                    onTap: () =>
+                        Navigator.of(context)
+                            .push(MaterialPageRoute(builder: (_) => ProductDetailScreen(productId: p.id))),
+                  ),
+                const SizedBox(height: 96),
+              ],
+            ),
     );
   }
 }

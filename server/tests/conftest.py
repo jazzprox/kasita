@@ -5,6 +5,8 @@ import pytest
 
 _tmp = tempfile.mkdtemp()
 os.environ["KASITA_DATABASE_URL"] = f"sqlite:///{_tmp}/test.db"
+os.environ["KASITA_AUTO_MIGRATE"] = "false"
+os.environ["KASITA_UPLOAD_DIR"] = f"{_tmp}/uploads"
 os.environ["KASITA_SECRET_KEY"] = "test-secret-key-that-is-long-enough-for-hs256"
 
 from fastapi.testclient import TestClient  # noqa: E402

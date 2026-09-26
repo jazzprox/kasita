@@ -72,7 +72,6 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  String locationName(String? id) =>
-      locations.where((l) => l.id == id).map((l) => l.name).firstOrNull ?? '';
+  String locationName(String? id) => locations.where((l) => l.id == id).map((l) => l.name).firstOrNull ?? '';
   String storeName(String? id) => stores.where((s) => s.id == id).map((s) => s.name).firstOrNull ?? '';
 }

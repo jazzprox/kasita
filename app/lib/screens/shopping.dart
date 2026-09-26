@@ -51,9 +51,14 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
   }
 
   ShoppingItem _flip(ShoppingItem i) => ShoppingItem.fromJson({
-        'id': i.id, 'name': i.name, 'product_id': i.productId, 'note': i.note,
-        'quantity': i.quantity, 'auto': i.auto, 'done': !i.done,
-      });
+    'id': i.id,
+    'name': i.name,
+    'product_id': i.productId,
+    'note': i.note,
+    'quantity': i.quantity,
+    'auto': i.auto,
+    'done': !i.done,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -61,59 +66,67 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
     final open = _items?.where((i) => !i.done).toList() ?? [];
     final done = _items?.where((i) => i.done).toList() ?? [];
     return Scaffold(
-      appBar: AppBar(title: const Text('Shopping list'), actions: [
-        IconButton(
-          tooltip: 'Add everything that is running low',
-          icon: const Icon(Icons.playlist_add),
-          onPressed: () async {
-            await s.api.refill(s.hid);
-            await _load();
-            if (context.mounted) toast(context, 'Added what is running low');
-          },
-        ),
-        if (done.isNotEmpty)
+      appBar: AppBar(
+        title: const Text('Shopping list'),
+        actions: [
           IconButton(
-            tooltip: 'Remove ticked items',
-            icon: const Icon(Icons.cleaning_services_outlined),
+            tooltip: 'Add everything that is running low',
+            icon: const Icon(Icons.playlist_add),
             onPressed: () async {
-              await s.api.clearDone(s.hid);
+              await s.api.refill(s.hid);
               await _load();
+              if (context.mounted) toast(context, 'Added what is running low');
             },
           ),
-      ]),
-      body: Column(children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-          child: TextField(
-            controller: _add,
-            textInputAction: TextInputAction.done,
-            onSubmitted: (_) => _addText(),
-            decoration: InputDecoration(
-              hintText: 'Add items: 2x milk, bread',
-              border: const OutlineInputBorder(),
-              suffixIcon: IconButton(icon: const Icon(Icons.add), onPressed: _addText),
+          if (done.isNotEmpty)
+            IconButton(
+              tooltip: 'Remove ticked items',
+              icon: const Icon(Icons.cleaning_services_outlined),
+              onPressed: () async {
+                await s.api.clearDone(s.hid);
+                await _load();
+              },
+            ),
+        ],
+      ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            child: TextField(
+              controller: _add,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _addText(),
+              decoration: InputDecoration(
+                hintText: 'Add items: 2x milk, bread',
+                border: const OutlineInputBorder(),
+                suffixIcon: IconButton(icon: const Icon(Icons.add), onPressed: _addText),
+              ),
             ),
           ),
-        ),
-        Expanded(
-          child: _items == null
-              ? const Center(child: CircularProgressIndicator())
-              : _items!.isEmpty
-                  ? const EmptyState(
-                      icon: Icons.shopping_cart_outlined,
-                      title: 'Nothing to buy',
-                      message: 'Items that run low in the pantry show up here automatically.')
-                  : RefreshIndicator(
-                      onRefresh: _load,
-                      child: ListView(children: [
+          Expanded(
+            child: _items == null
+                ? const Center(child: CircularProgressIndicator())
+                : _items!.isEmpty
+                ? const EmptyState(
+                    icon: Icons.shopping_cart_outlined,
+                    title: 'Nothing to buy',
+                    message: 'Items that run low in the pantry show up here automatically.',
+                  )
+                : RefreshIndicator(
+                    onRefresh: _load,
+                    child: ListView(
+                      children: [
                         for (final i in open) _tile(i),
                         if (done.isNotEmpty) const Divider(),
                         for (final i in done) _tile(i),
                         const SizedBox(height: 80),
-                      ]),
+                      ],
                     ),
-        ),
-      ]),
+                  ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -123,10 +136,11 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
       key: ValueKey(i.id),
       direction: DismissDirection.endToStart,
       background: Container(
-          color: cs.errorContainer,
-          alignment: Alignment.centerRight,
-          padding: const EdgeInsets.only(right: 20),
-          child: Icon(Icons.delete_outline, color: cs.onErrorContainer)),
+        color: cs.errorContainer,
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        child: Icon(Icons.delete_outline, color: cs.onErrorContainer),
+      ),
       onDismissed: (_) async {
         final s = Kasita.read(context);
         setState(() => _items!.removeWhere((x) => x.id == i.id));
