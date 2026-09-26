@@ -1,0 +1,39 @@
+# Kasita on LightningFriction: API (+ web app later) and its Postgres.
+# Secrets in .env (not in git). Reached at https://kasita.jazzproxy.com via nginx + tunnel.
+name: kasita
+
+services:
+  kasita-db:
+    image: postgres:17-alpine
+    container_name: kasita-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=kasita
+      - POSTGRES_USER=kasita
+      - POSTGRES_PASSWORD=${KASITA_DB_PASSWORD}
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kasita -d kasita"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  kasita:
+    build: ./server
+    image: kasita-server:local
+    container_name: kasita
+    restart: unless-stopped
+    mem_limit: 384m
+    depends_on:
+      kasita-db:
+        condition: service_healthy
+    environment:
+      - KASITA_DATABASE_URL=postgresql+psycopg://kasita:${KASITA_DB_PASSWORD}@kasita-db:5432/kasita
+      - KASITA_SECRET_KEY=${KASITA_SECRET_KEY}
+      - KASITA_PUBLIC_URL=https://kasita.jazzproxy.com
+      - KASITA_OFF_CONTACT=kasita.jazzproxy.com
+    volumes:
+      - ./data/uploads:/data/uploads
+    ports:
+      - "127.0.0.1:3008:8000"
