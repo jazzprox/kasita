@@ -1,0 +1,30 @@
+[project]
+name = "kasita-server"
+version = "0.1.0"
+description = "Kasita: self-hosted household pantry, shopping list, barcode and receipt scanning"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi==0.141.1",
+    "uvicorn[standard]==0.54.0",
+    "sqlalchemy==2.1.1",
+    "psycopg[binary]==3.3.6",
+    "alembic==1.20.0",
+    "pydantic-settings==2.15.0",
+    "argon2-cffi==25.1.0",
+    "pyjwt==2.15.0",
+    "httpx==0.28.1",
+    "python-multipart==0.0.32",
+]
+
+[project.optional-dependencies]
+test = ["pytest==9.1.1"]
+
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
