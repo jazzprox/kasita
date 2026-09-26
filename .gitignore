@@ -7,3 +7,7 @@ uploads/
 server/*.egg-info/
 build/
 data/
+server/web/*
+!server/web/.gitkeep
+app/build/
+app/.dart_tool/

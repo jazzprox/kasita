@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     # how long a barcode lookup result (found or not found) is trusted before asking again
     barcode_cache_days: int = 30
     upload_dir: str = "./uploads"
+    # Flutter web build to serve at /, if present
+    web_dir: str = "./web"
 
 
 settings = Settings()

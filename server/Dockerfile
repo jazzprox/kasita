@@ -5,6 +5,8 @@ WORKDIR /srv
 
 COPY pyproject.toml .
 COPY app ./app
+# Flutter web build (from app/build/web), served at /
+COPY web ./web
 RUN pip install --no-cache-dir . && useradd --uid 10001 --create-home kasita && mkdir -p /data/uploads && chown kasita /data/uploads
 
 USER kasita
