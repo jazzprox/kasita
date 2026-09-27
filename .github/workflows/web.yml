@@ -1,0 +1,46 @@
+# Builds the Kasita web app and publishes it to the `web-dist` branch.
+# The home server is too tight on memory for dart2js, so it only pulls this
+# branch (with its deploy key) and copies it into server/web: see
+# scripts/deploy-web.sh. No secrets needed.
+name: Web app
+
+on:
+  push:
+    branches: [main]
+    paths: ["app/**", ".github/workflows/web.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # to push the web-dist branch
+
+concurrency:
+  group: web-dist
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.47.5"
+          cache: true
+
+      - name: Build
+        working-directory: app
+        run: |
+          flutter pub get
+          flutter analyze
+          flutter build web --release
+
+      - name: Publish to web-dist
+        run: |
+          cd app/build/web
+          echo "${GITHUB_SHA}" > BUILD_COMMIT
+          git init -q -b web-dist
+          git add -A
+          git -c user.name="github-actions" -c user.email="github-actions@users.noreply.github.com" \
+            commit -q -m "Web build of ${GITHUB_SHA}"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" web-dist
