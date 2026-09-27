@@ -44,8 +44,7 @@ if settings.web_dir and Path(settings.web_dir, "index.html").is_file():
             raise HTTPException(404, "Not found")
         target = (web_root / path).resolve()
         if path and target.is_file() and web_root in target.parents:
-            # hashed assets can be cached; index.html and the service worker must not be
-            cache = "no-cache" if target.name in ("index.html", "flutter_service_worker.js", "version.json") \
-                else "public, max-age=604800"
-            return FileResponse(target, headers={"Cache-Control": cache})
+            # Flutter web file names are NOT content-hashed (main.dart.js keeps its name
+            # across builds), so everything must be revalidated or clients run stale code.
+            return FileResponse(target, headers={"Cache-Control": "no-cache"})
         return FileResponse(web_root / "index.html", headers={"Cache-Control": "no-cache"})
