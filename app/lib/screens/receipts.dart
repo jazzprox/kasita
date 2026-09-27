@@ -10,6 +10,7 @@ import '../main.dart';
 import '../models.dart';
 import '../widgets.dart';
 import 'chatgpt.dart';
+import 'securo.dart';
 
 final _money = NumberFormat('#,##0.00');
 String money(double? v) => v == null ? '—' : _money.format(v);
@@ -501,6 +502,8 @@ class _ReceiptReviewScreenState extends State<ReceiptReviewScreen> {
                       style: t.textTheme.bodySmall,
                     ),
                   ),
+                if ((r.status == 'parsed' || r.status == 'confirmed') && r.total != null)
+                  SecuroPaymentSection(receipt: r, onChanged: (updated) => setState(() => _r = updated)),
                 for (final l in r.lines ?? const <ReceiptLine>[])
                   _LineTile(line: l, onTap: editable ? () => _editLine(l) : null),
                 if (editable && !r.reading && r.status == 'parsed')

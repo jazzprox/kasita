@@ -242,4 +242,25 @@ class Api {
   Future<ChatGPTStatus> chatgptSetModel(String hid, String model) async =>
       ChatGPTStatus.fromJson(await patch(_gpt(hid), {'model': model}));
   Future<void> chatgptDisconnect(String hid) => delete(_gpt(hid));
+
+  // --- Securo (finance app) ------------------------------------------------
+  String _sec(String hid) => '${_h(hid)}/integrations/securo';
+  Future<Map<String, dynamic>> securo(String hid) async => Map<String, dynamic>.from(await get(_sec(hid)));
+  Future<Map<String, dynamic>> securoConnect(String hid, String url, String email, String password) async =>
+      Map<String, dynamic>.from(await post(_sec(hid), {'url': url, 'email': email, 'password': password}));
+  Future<void> securoDisconnect(String hid) => delete(_sec(hid));
+  Future<List<SecuroPayment>> securoCandidates(String hid, String receiptId) async =>
+      (await get('${_h(hid)}/receipts/$receiptId/securo-candidates') as List)
+          .map((e) => SecuroPayment.fromJson(e))
+          .toList();
+  Future<Receipt> securoLink(String hid, String receiptId, String txId, {bool photo = true, bool note = true}) async =>
+      Receipt.fromJson(
+        await post('${_h(hid)}/receipts/$receiptId/securo-link', {
+          'transaction_id': txId,
+          'attach_photo': photo,
+          'add_note': note,
+        }),
+      );
+  Future<Receipt> securoUnlink(String hid, String receiptId) async =>
+      Receipt.fromJson(await delete('${_h(hid)}/receipts/$receiptId/securo-link'));
 }

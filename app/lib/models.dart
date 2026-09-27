@@ -155,7 +155,7 @@ class ReceiptLine {
 
 class Receipt {
   final String id, status;
-  final String? error, storeId, storeName, currency;
+  final String? error, storeId, storeName, currency, securoTransactionId;
   final DateTime? purchasedOn;
   final DateTime createdAt;
   final double? total, linesTotal;
@@ -168,6 +168,7 @@ class Receipt {
       storeId = j['store_id'],
       storeName = j['store_name'],
       currency = j['currency'],
+      securoTransactionId = j['securo_transaction_id'],
       purchasedOn = _date(j['purchased_on']),
       createdAt = _date(j['created_at']) ?? DateTime.now(),
       total = _numOrNull(j['total']),
@@ -190,4 +191,21 @@ class ChatGPTStatus {
       userCode = j['pending']?['user_code'],
       verificationUrl = j['pending']?['verification_url'],
       interval = j['pending']?['interval'] ?? 5;
+}
+
+class SecuroPayment {
+  final String id;
+  final String? description, currency, notes;
+  final DateTime? date;
+  final double amount;
+  final int score, attachmentCount;
+  SecuroPayment.fromJson(Map<String, dynamic> j)
+    : id = j['id'],
+      description = j['description'],
+      currency = j['currency'],
+      notes = j['notes'],
+      date = _date(j['date']),
+      amount = _num(j['amount']),
+      score = j['score'] ?? 0,
+      attachmentCount = j['attachment_count'] ?? 0;
 }

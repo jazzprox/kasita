@@ -7,6 +7,7 @@ import '../models.dart';
 import '../widgets.dart';
 import 'chatgpt.dart';
 import 'receipts.dart';
+import 'securo.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -104,6 +105,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: const Text('ChatGPT'),
             subtitle: const Text('Reads receipts with your ChatGPT subscription'),
             onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ChatGPTScreen())),
+          ),
+          ListTile(
+            leading: const Icon(Icons.account_balance_wallet_outlined),
+            title: const Text('Securo'),
+            subtitle: const Text('Link receipts to card payments'),
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SecuroScreen())),
           ),
           const Divider(),
           Padding(

@@ -273,6 +273,7 @@ class ReceiptOut(BaseModel):
     total: Decimal | None
     currency: str | None
     created_at: datetime
+    securo_transaction_id: str | None = None
     line_count: int = 0
     lines_total: Decimal | None = None  # sum of the lines, to compare with `total`
     lines: list[ReceiptLineOut] | None = None
@@ -334,3 +335,32 @@ class ChatGPTStatus(BaseModel):
 
 class ModelIn(BaseModel):
     model: str = Field(min_length=1, max_length=80)
+
+
+class SecuroStatus(BaseModel):
+    connected: bool
+    url: str | None = None
+    email: str | None = None
+
+
+class SecuroConnectIn(BaseModel):
+    url: str = Field(default="https://fin.jazzproxy.com", min_length=8, max_length=200)
+    email: str = Field(min_length=3, max_length=255)
+    password: str = Field(min_length=1, max_length=255)
+
+
+class SecuroCandidate(BaseModel):
+    id: str
+    date: str | None
+    description: str | None
+    amount: str
+    currency: str | None
+    notes: str | None
+    attachment_count: int
+    score: int
+
+
+class SecuroLinkIn(BaseModel):
+    transaction_id: str = Field(min_length=1, max_length=64)
+    attach_photo: bool = True
+    add_note: bool = True

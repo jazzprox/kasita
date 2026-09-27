@@ -9,8 +9,9 @@ from ..db import get_db
 from ..deps import HouseholdAccess, household_access
 from ..models import Location, Product, Receipt, ReceiptLine, Store
 from ..schemas import (ConfirmIn, ConfirmOut, ReceiptLineIn, ReceiptLineOut, ReceiptLinePatch, ReceiptOut,
-                       ReceiptPatch)
+                       ReceiptPatch, SecuroCandidate, SecuroLinkIn)
 from ..services import receipts as svc
+from ..services import securo
 from .stock import _check_ref
 
 router = APIRouter(prefix="/api/households/{household_id}/receipts", tags=["receipts"])
@@ -41,7 +42,7 @@ def receipt_out(db: Session, r: Receipt, with_lines: bool = False) -> ReceiptOut
     totals = [ln.line_total for ln in r.lines if ln.line_total is not None]
     out = ReceiptOut(id=r.id, status=r.status, error=r.error, store_id=r.store_id, store_name=r.store_name,
                      purchased_on=r.purchased_on, total=r.total, currency=r.currency, created_at=r.created_at,
-                     line_count=len(r.lines), lines_total=sum(totals) if totals else None)
+                     securo_transaction_id=r.securo_transaction_id, line_count=len(r.lines), lines_total=sum(totals) if totals else None)
     if with_lines:
         names = {p.id: p.name for p in db.scalars(select(Product).where(
             Product.id.in_([ln.product_id for ln in r.lines if ln.product_id])))}
@@ -179,3 +180,47 @@ def delete_receipt(receipt_id: str, a: HouseholdAccess = Depends(household_acces
         Path(r.image_path).unlink(missing_ok=True)
     db.delete(r)
     db.commit()
+
+
+# --- Securo: which card payment was this? ------------------------------------------
+@router.get("/{receipt_id}/securo-candidates", response_model=list[SecuroCandidate])
+def securo_candidates(receipt_id: str, a: HouseholdAccess = Depends(household_access), db: Session = Depends(get_db)):
+    """Card payments in Securo with this receipt's amount around its date, best match first."""
+    r = _get(db, a, receipt_id)
+    try:
+        conn = securo.conn_for(db, a.household.id)
+        return securo.candidates(db, r, securo.transactions(conn, *securo.search_window(r)))
+    except securo.SecuroError as e:
+        raise HTTPException(502, str(e)) from e
+
+
+@router.post("/{receipt_id}/securo-link", response_model=ReceiptOut)
+def securo_link(receipt_id: str, body: SecuroLinkIn, a: HouseholdAccess = Depends(household_access),
+                db: Session = Depends(get_db)):
+    """Link the receipt to a Securo payment; optionally attach the photo and add an item summary to its note."""
+    r = _get(db, a, receipt_id)
+    try:
+        conn = securo.conn_for(db, a.household.id)
+        txns = securo.transactions(conn, *securo.search_window(r))
+        t = next((t for t in txns if t["id"] == body.transaction_id), None)
+        if t is None:
+            raise HTTPException(404, "That payment is not near this receipt's date")
+        photo = Path(r.image_path).read_bytes() if body.attach_photo and r.image_path and Path(r.image_path).is_file() \
+            else None
+        name = f"receipt-{(r.purchased_on or r.created_at.date()).isoformat()}.jpg"
+        securo.link(conn, t["id"], photo=photo, photo_name=name,
+                    note=securo.summary_note(db, r) if body.add_note else None, existing_notes=t.get("notes"))
+    except securo.SecuroError as e:
+        raise HTTPException(502, str(e)) from e
+    r.securo_transaction_id = t["id"]
+    db.commit()
+    return receipt_out(db, r, with_lines=True)
+
+
+@router.delete("/{receipt_id}/securo-link", response_model=ReceiptOut)
+def securo_unlink(receipt_id: str, a: HouseholdAccess = Depends(household_access), db: Session = Depends(get_db)):
+    """Forget the link in Kasita (the photo and note stay in Securo)."""
+    r = _get(db, a, receipt_id)
+    r.securo_transaction_id = None
+    db.commit()
+    return receipt_out(db, r, with_lines=True)
