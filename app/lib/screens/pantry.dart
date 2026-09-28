@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../main.dart';
 import '../models.dart';
 import '../widgets.dart';
+import 'cook.dart';
 import 'pantry_pass.dart';
 import 'actions.dart';
 import 'product_detail.dart';
@@ -36,6 +37,11 @@ class _PantryScreenState extends State<PantryScreen> {
       appBar: AppBar(
         title: const Text('Pantry'),
         actions: [
+          IconButton(
+            tooltip: 'What can I cook?',
+            icon: const Icon(Icons.restaurant_menu),
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CookScreen())),
+          ),
           TextButton.icon(
             onPressed: () async {
               await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PantryPassScreen()));

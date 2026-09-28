@@ -214,6 +214,10 @@ class Api {
       (await post('${_h(hid)}/stock/purchase', body) as Map)['event_id'] as String?;
   Future<Map<String, dynamic>> spending(String hid, int days) async =>
       Map<String, dynamic>.from(await get('${_h(hid)}/stock/spending', {'days': '$days'}));
+  Future<Map<String, dynamic>> cook(String hid, String? note) async =>
+      Map<String, dynamic>.from(await post('${_h(hid)}/cook', {'note': note}));
+  Future<Map<String, dynamic>> contribute(String hid, String pid) async =>
+      Map<String, dynamic>.from(await post('${_h(hid)}/products/$pid/contribute'));
   Future<void> undoStock(String hid, List<String> eventIds) => post('${_h(hid)}/stock/undo', {'event_ids': eventIds});
   Future<Map<String, dynamic>> consume(String hid, String pid, double qty, {bool spoiled = false}) async =>
       Map<String, dynamic>.from(

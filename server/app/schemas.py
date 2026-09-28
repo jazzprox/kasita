@@ -158,6 +158,7 @@ class ProductOut(ORM):
     barcodes: list[str] = []
     in_stock: Decimal = Decimal(0)
     next_best_before: date | None = None
+    shareable: bool = False  # has a barcode no database knows: can be given to Open Food Facts
 
 
 class BarcodeLookupOut(BaseModel):
@@ -378,3 +379,7 @@ class SecuroLinkIn(BaseModel):
     transaction_id: str = Field(min_length=1, max_length=64)
     attach_photo: bool = True
     add_note: bool = True
+
+
+class CookIn(BaseModel):
+    note: str | None = Field(default=None, max_length=200)

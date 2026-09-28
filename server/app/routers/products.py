@@ -9,9 +9,11 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..deps import HouseholdAccess, household_access
 from ..models import Product, ProductBarcode, StockEntry, StockEvent, Store
-from ..schemas import BarcodeLookupOut, PricePoint, ProductIn, ProductOut, ProductPatch
+from ..schemas import CookIn, BarcodeLookupOut, PricePoint, ProductIn, ProductOut, ProductPatch
 from ..services import barcodes as bc
 from ..services import categories, codex
+from ..services import contribute as contrib
+from ..services import cook as cooking
 from ..services import identify as ident
 from ..services.stock import get_product, in_stock
 
@@ -21,9 +23,9 @@ router = APIRouter(prefix="/api/households/{household_id}", tags=["products"])
 def product_out(db: Session, p: Product) -> ProductOut:
     nxt = db.scalar(select(func.min(StockEntry.best_before)).where(
         StockEntry.product_id == p.id, StockEntry.quantity > 0))
-    fields = {k: getattr(p, k) for k in ProductOut.model_fields if k not in ("barcodes", "in_stock", "next_best_before")}
+    fields = {k: getattr(p, k) for k in ProductOut.model_fields if k not in ("barcodes", "in_stock", "next_best_before", "shareable")}
     return ProductOut(**fields, barcodes=[b.barcode for b in p.barcodes], in_stock=in_stock(db, p.id),
-                      next_best_before=nxt)
+                      next_best_before=nxt, shareable=contrib.shareable_barcode(db, p) is not None)
 
 
 def _attach_barcodes(db: Session, household_id: str, product: Product, codes: list[str]) -> None:
@@ -166,3 +168,22 @@ def product_image(household_id: str, name: str):
     if not path.is_file():
         raise HTTPException(404, "Not found")
     return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=31536000, immutable"})
+
+
+@router.post("/products/{product_id}/contribute")
+def contribute_product(product_id: str, a: HouseholdAccess = Depends(household_access), db: Session = Depends(get_db)):
+    """Add this product (name, brand, category, your photo) to the Open Food Facts family."""
+    p = get_product(db, a.household.id, product_id)
+    try:
+        return contrib.contribute(db, p)
+    except contrib.ContributeError as e:
+        raise HTTPException(409, str(e)) from e
+
+
+@router.post("/cook")
+def what_can_i_cook(body: CookIn, a: HouseholdAccess = Depends(household_access), db: Session = Depends(get_db)):
+    """Meal ideas from what is at home, soon-expiring things first (the household's ChatGPT)."""
+    try:
+        return cooking.suggest(db, a.household.id, body.note)
+    except codex.CodexError as e:
+        raise HTTPException(502, str(e)) from e

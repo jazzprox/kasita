@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     ntfy_url: str = ""
     ntfy_topic: str = ""
     ntfy_token: str = ""
+    # Open Food Facts account for 'Share with Open Food Facts' (username, not email). Empty = off.
+    off_user_id: str = ""
+    off_password: str = ""
+    off_write_host: str = ""  # "openfoodfacts.net" = their staging server, for testing
     # how long a barcode lookup result (found or not found) is trusted before asking again
     barcode_cache_days: int = 30
     upload_dir: str = "./uploads"

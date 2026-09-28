@@ -22,6 +22,35 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   List<PricePoint> _prices = [];
   int _seen = -1;
 
+  Future<void> _share() async {
+    final s = Kasita.read(context);
+    final p = _p!;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Share with Open Food Facts?'),
+        content: Text(
+          'Adds "${p.name}"${p.brand == null ? '' : ' (${p.brand})'}, its barcode, category'
+          '${p.imageUrl == null ? '' : ' and your photo'} to the free, public Open Food Facts databases, '
+          'under your account. Anyone can then find it by scanning, and anyone can improve it.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Share')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      final r = await s.api.contribute(s.hid, p.id);
+      if (!mounted) return;
+      toast(context, 'Added to ${r['site']}. Thank you!');
+      _load();
+    } on ApiException catch (e) {
+      if (mounted) toast(context, e.message, error: true);
+    }
+  }
+
   Future<void> _addBarcode() async {
     final s = Kasita.read(context);
     final code = await Navigator.of(context).push<String>(
@@ -207,6 +236,17 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               subtitle: Text(pr.storeName ?? 'unknown store'),
               trailing: Text(dateFmtYear.format(pr.at.toLocal())),
             ),
+          if (p.shareable) ...[
+            const SizedBox(height: 16),
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.volunteer_activism_outlined),
+                title: const Text('Share with Open Food Facts'),
+                subtitle: const Text('No database knew this barcode. Add it so the next person who scans it finds it.'),
+                onTap: _share,
+              ),
+            ),
+          ],
           const SizedBox(height: 24),
           Row(
             children: [

@@ -36,6 +36,7 @@ class Product {
   final int? shelfLifeDays;
   final List<String> barcodes;
   final DateTime? nextBestBefore;
+  final bool shareable; // a barcode no database knows: can be given to Open Food Facts
 
   Product.fromJson(Map<String, dynamic> j)
     : id = j['id'],
@@ -50,7 +51,8 @@ class Product {
       inStock = _num(j['in_stock']),
       shelfLifeDays = j['shelf_life_days'],
       barcodes = List<String>.from(j['barcodes'] ?? const []),
-      nextBestBefore = _date(j['next_best_before']);
+      nextBestBefore = _date(j['next_best_before']),
+      shareable = j['shareable'] ?? false;
 }
 
 class StockEntry {
