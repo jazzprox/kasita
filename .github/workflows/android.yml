@@ -40,6 +40,8 @@ jobs:
         working-directory: app
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # history + tags for the release notes
 
       - uses: actions/setup-java@v4
         with:
@@ -73,7 +75,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="android-${{ github.run_number }}"
+          ../scripts/release-notes.sh > notes.md
           cp build/app/outputs/flutter-apk/app-release.apk "kasita-${{ github.run_number }}.apk"
           gh release create "$TAG" "kasita-${{ github.run_number }}.apk" \
             --title "Kasita Android build ${{ github.run_number }}" \
-            --notes "Built from ${{ github.sha }}" --latest
+            --notes-file notes.md --latest
