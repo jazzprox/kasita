@@ -26,6 +26,7 @@ app = FastAPI(title="Kasita", version="0.1.0", lifespan=lifespan,
 for r in (auth.router, households.router, products.router, stock.router, shopping.router, receipts.router,
           integrations.router):
     app.include_router(r)
+app.include_router(products.public)
 
 
 @app.get("/api/health", tags=["meta"])

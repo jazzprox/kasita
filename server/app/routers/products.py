@@ -1,4 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+import re
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
@@ -7,7 +11,8 @@ from ..deps import HouseholdAccess, household_access
 from ..models import Product, ProductBarcode, StockEntry, StockEvent, Store
 from ..schemas import BarcodeLookupOut, PricePoint, ProductIn, ProductOut, ProductPatch
 from ..services import barcodes as bc
-from ..services import categories
+from ..services import categories, codex
+from ..services import identify as ident
 from ..services.stock import get_product, in_stock
 
 router = APIRouter(prefix="/api/households/{household_id}", tags=["products"])
@@ -129,3 +134,34 @@ def category_list(a: HouseholdAccess = Depends(household_access), db: Session = 
     used = db.scalars(select(Product.category).where(Product.household_id == a.household.id,
                                                      Product.category.is_not(None)).distinct()).all()
     return categories.CATEGORIES + sorted(c for c in used if c and c not in categories.CATEGORIES)
+
+
+@router.post("/products/identify")
+async def identify_product(file: UploadFile = File(...), a: HouseholdAccess = Depends(household_access),
+                           db: Session = Depends(get_db)):
+    """Photo of a pack -> suggested name, brand, size, category (via the household's ChatGPT).
+    Nothing is created; the app opens the New-product form with these values."""
+    data = await file.read(20 * 1024 * 1024 + 1)
+    if len(data) > 20 * 1024 * 1024:
+        raise HTTPException(413, "Photo is larger than 20 MB")
+    try:
+        return ident.identify(db, a.household.id, data)
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+    except codex.CodexError as e:
+        raise HTTPException(502, str(e)) from e
+
+
+public = APIRouter(tags=["products"])
+
+
+@public.get("/api/product-images/{household_id}/{name}", include_in_schema=False)
+def product_image(household_id: str, name: str):
+    """Product photos taken in the app. No login, like the Open Food Facts images: the file
+    name is 128 random bits, so it can't be guessed."""
+    if not re.fullmatch(r"[0-9a-f-]{36}", household_id) or not re.fullmatch(r"[0-9a-f]{32}\.jpg", name):
+        raise HTTPException(404, "Not found")
+    path = Path(ident.product_images_dir(household_id)) / name
+    if not path.is_file():
+        raise HTTPException(404, "Not found")
+    return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=31536000, immutable"})

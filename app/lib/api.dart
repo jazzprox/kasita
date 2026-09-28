@@ -202,6 +202,10 @@ class Api {
   Future<List<String>> categories(String hid) async => List<String>.from(await get('${_h(hid)}/categories'));
   Future<Product> addBarcode(String hid, String pid, String code) async =>
       Product.fromJson(await post('${_h(hid)}/products/$pid/barcodes?barcode=${Uri.encodeQueryComponent(code)}'));
+
+  /// Photo of a pack -> suggested name/brand/size/category and the photo's URL (ChatGPT reads it).
+  Future<Map<String, dynamic>> identifyProduct(String hid, Uint8List photo) async =>
+      Map<String, dynamic>.from(await upload('${_h(hid)}/products/identify', [(photo, 'product.jpg')]));
   Future<BarcodeResult> barcode(String hid, String code) async =>
       BarcodeResult.fromJson(await get('${_h(hid)}/barcodes/${Uri.encodeComponent(code)}'));
 
