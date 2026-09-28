@@ -71,10 +71,15 @@ class MemberOut(BaseModel):
     role: str
 
 
+class InviteIn(BaseModel):
+    own_household: bool = False  # True: they get their own household instead of joining this one
+
+
 class InviteOut(BaseModel):
     token: str
     url: str
     expires_at: datetime
+    own_household: bool = False
 
 
 class ApiKeyIn(BaseModel):

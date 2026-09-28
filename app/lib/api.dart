@@ -238,8 +238,8 @@ class Api {
 
   Future<List<Member>> members(String hid) async =>
       (await get('${_h(hid)}/members') as List).map((e) => Member.fromJson(e)).toList();
-  Future<Map<String, dynamic>> createInvite(String hid) async =>
-      Map<String, dynamic>.from(await post('${_h(hid)}/invites'));
+  Future<Map<String, dynamic>> createInvite(String hid, {bool ownHousehold = false}) async =>
+      Map<String, dynamic>.from(await post('${_h(hid)}/invites', {'own_household': ownHousehold}));
 
   // --- receipts -----------------------------------------------------------
   Future<List<Receipt>> receipts(String hid) async =>

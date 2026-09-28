@@ -226,3 +226,29 @@ def test_shopping_items_carry_a_category(client, jazz):
     client.post(f"{base}/shopping", json={"name": "thing"}, headers=h)
     cats = {i["name"]: i["category"] for i in client.get(f"{base}/shopping", headers=h).json()}
     assert cats == {"Head & Shoulders": "Personal care", "bananas": "Produce", "thing": None}
+
+
+def test_invite_to_their_own_household(client, jazz):
+    h, hid = jazz
+    inv = client.post(f"/api/households/{hid}/invites", json={"own_household": True}, headers=h).json()
+    assert inv["own_household"] is True
+    r = client.post("/api/auth/accept-invite", json={"token": inv["url"].rsplit("/", 1)[1], "email": "friend@example.com",
+                                                      "name": "Ana", "password": "a-long-password"})
+    assert r.status_code == 200, r.text
+    friend = {"Authorization": f"Bearer {r.json()['access_token']}"}
+    theirs = client.get("/api/households", headers=friend).json()
+    assert [x["name"] for x in theirs] == ["Ana's household"] and theirs[0]["role"] == "owner"
+    assert len(client.get(f"/api/households/{theirs[0]['id']}/locations", headers=friend).json()) == 3
+    # no access to the inviter's household, and the inviter's members are unchanged
+    assert client.get(f"/api/households/{hid}/stock", headers=friend).status_code == 404
+    assert [m["email"] for m in client.get(f"/api/households/{hid}/members", headers=h).json()] == ["jazz@example.com"]
+
+
+def test_default_invite_still_joins(client, jazz):
+    h, hid = jazz
+    inv = client.post(f"/api/households/{hid}/invites", headers=h).json()
+    assert inv["own_household"] is False
+    r = client.post("/api/auth/accept-invite", json={"token": inv["url"].rsplit("/", 1)[1], "email": "fam@example.com",
+                                                      "name": "Fam", "password": "a-long-password"})
+    fam = {"Authorization": f"Bearer {r.json()['access_token']}"}
+    assert [x["id"] for x in client.get("/api/households", headers=fam).json()] == [hid]

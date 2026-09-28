@@ -9,7 +9,7 @@ from ..db import get_db
 from ..deps import HouseholdAccess, current_user, household_access, household_owner
 from ..models import ApiKey, Household, Invite, Location, Membership, Store, User
 from ..schemas import (
-    ApiKeyCreated, ApiKeyIn, ApiKeyOut, HouseholdIn, HouseholdOut, HouseholdPatch, InviteOut, LocationIn,
+    ApiKeyCreated, ApiKeyIn, ApiKeyOut, HouseholdIn, HouseholdOut, HouseholdPatch, InviteIn, InviteOut, LocationIn,
     LocationOut, MemberOut, StoreIn, StoreOut,
 )
 from ..security import new_token, token_hash
@@ -70,12 +70,18 @@ def remove_member(user_id: str, a: HouseholdAccess = Depends(household_access), 
 
 
 @router.post("/{household_id}/invites", response_model=InviteOut, status_code=201)
-def create_invite(a: HouseholdAccess = Depends(household_owner), db: Session = Depends(get_db)):
+def create_invite(body: InviteIn | None = None, a: HouseholdAccess = Depends(household_owner),
+                  db: Session = Depends(get_db)):
+    """A one-time link (7 days). Default: joins this household. own_household: the invitee gets an
+    account with a new, separate household of their own and no access to this one."""
+    own = bool(body and body.own_household)
     token = new_token(24)
     expires = datetime.now(timezone.utc) + timedelta(days=7)
-    db.add(Invite(token_hash=token_hash(token), household_id=a.household.id, created_by=a.user.id, expires_at=expires))
+    db.add(Invite(token_hash=token_hash(token), household_id=a.household.id, created_by=a.user.id, expires_at=expires,
+                  own_household=own))
     db.commit()
-    return InviteOut(token=token, url=f"{settings.public_url.rstrip('/')}/#/invite/{token}", expires_at=expires)
+    return InviteOut(token=token, url=f"{settings.public_url.rstrip('/')}/#/invite/{token}", expires_at=expires,
+                     own_household=own)
 
 
 # --- API keys ---------------------------------------------------------------

@@ -14,7 +14,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from sqlalchemy import (
-    JSON, Boolean, Date, DateTime, ForeignKey, Index, Numeric, String, Text, UniqueConstraint,
+    JSON, Boolean, Date, DateTime, ForeignKey, Index, Numeric, String, Text, UniqueConstraint, false,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -69,7 +69,8 @@ class Membership(Base):
 
 
 class Invite(Base):
-    """One-time invite into a household. Kasita has no open sign-up."""
+    """One-time invite. Kasita has no open sign-up: an invite either adds someone to this
+    household, or (own_household) lets them create an account with a household of their own."""
     __tablename__ = "invites"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     token_hash: Mapped[str] = mapped_column(String(64), unique=True)
@@ -77,6 +78,8 @@ class Invite(Base):
     created_by: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # True: the invitee gets an account and a new household of their own, not a seat in this one
+    own_household: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
 
 
 class RefreshToken(Base):

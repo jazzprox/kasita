@@ -33,8 +33,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _invite() async {
     final s = Kasita.read(context);
+    final own = await showModalBottomSheet<bool>(
+      context: context,
+      showDragHandle: true,
+      builder: (c) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.group_add_outlined),
+              title: Text('Join ${s.household!.name}'),
+              subtitle: const Text('For family: they share this pantry, shopping list and receipts'),
+              onTap: () => Navigator.pop(c, false),
+            ),
+            ListTile(
+              leading: const Icon(Icons.add_home_outlined),
+              title: const Text('Their own household'),
+              subtitle: const Text('Kasita for themselves: a separate, empty household. They see nothing of yours.'),
+              onTap: () => Navigator.pop(c, true),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (own == null || !mounted) return;
     try {
-      final inv = await s.api.createInvite(s.hid);
+      final inv = await s.api.createInvite(s.hid, ownHousehold: own);
       final url = inv['url'] as String;
       await Clipboard.setData(ClipboardData(text: url));
       if (!mounted) return;
@@ -46,7 +70,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Send this link to the person you want to add. It works once and expires in 7 days.'),
+              Text(
+                inv['own_household'] == true
+                    ? 'Send this link to the person. It creates their account with a household of their own. It works once and expires in 7 days.'
+                    : 'Send this link to the person you want to add to ${s.household!.name}. It works once and expires in 7 days.',
+              ),
               const SizedBox(height: 12),
               SelectableText(url, style: const TextStyle(fontSize: 12)),
             ],
@@ -135,7 +163,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ListTile(
               leading: const Icon(Icons.person_add_alt),
               title: const Text('Invite someone'),
-              subtitle: const Text('Creates a one-time link'),
+              subtitle: const Text('To this household, or to a household of their own'),
               onTap: _invite,
             ),
           const Divider(),

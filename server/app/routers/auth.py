@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from ..config import settings
 from ..db import get_db
 from ..deps import Caller, current_user, get_caller
-from ..models import Invite, Membership, RefreshToken, User
+from ..models import Household, Invite, Location, Membership, RefreshToken, User
 from ..schemas import AcceptInviteIn, ChangePasswordIn, LoginIn, RefreshIn, TokensOut, UserOut
 from ..security import hash_password, make_access_token, new_token, token_hash, verify_password
 
@@ -90,9 +90,21 @@ def accept_invite(body: AcceptInviteIn, db: Session = Depends(get_db)):
         user = User(email=email, name=body.name.strip(), password_hash=hash_password(body.password))
         db.add(user)
         db.flush()
-    exists = db.scalar(select(Membership).where(Membership.user_id == user.id, Membership.household_id == inv.household_id))
-    if not exists:
-        db.add(Membership(user_id=user.id, household_id=inv.household_id, role="member"))
+    if inv.own_household:
+        # a household of their own: same currency as the inviter's, the usual storage places
+        from .households import DEFAULT_LOCATIONS
+        inviter = db.get(Household, inv.household_id)
+        h = Household(name=f"{user.name}'s household", currency=inviter.currency if inviter else "XCG")
+        db.add(h)
+        db.flush()
+        db.add(Membership(user_id=user.id, household_id=h.id, role="owner"))
+        for loc, freezer in DEFAULT_LOCATIONS:
+            db.add(Location(household_id=h.id, name=loc, is_freezer=freezer))
+    else:
+        exists = db.scalar(select(Membership).where(Membership.user_id == user.id,
+                                                    Membership.household_id == inv.household_id))
+        if not exists:
+            db.add(Membership(user_id=user.id, household_id=inv.household_id, role="member"))
     inv.used_at = datetime.now(timezone.utc)
     db.commit()
     return issue_tokens(db, user, "invite")
