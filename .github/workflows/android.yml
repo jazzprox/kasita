@@ -74,9 +74,25 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="android-${{ github.run_number }}"
+          N=${{ github.run_number }}
+          # zero-padded so the releases page (which sorts tags as text) lists 0012 above 0009
+          TAG=$(printf 'android-%04d' "$N")
           ../scripts/release-notes.sh > notes.md
-          cp build/app/outputs/flutter-apk/app-release.apk "kasita-${{ github.run_number }}.apk"
-          gh release create "$TAG" "kasita-${{ github.run_number }}.apk" \
-            --title "Kasita Android build ${{ github.run_number }}" \
-            --notes-file notes.md --latest
+          cp build/app/outputs/flutter-apk/app-release.apk "kasita-$N.apk"
+          gh release create "$TAG" "kasita-$N.apk" --title "Kasita build $N" --notes-file notes.md --latest
+
+      # One-time tidy, idempotent: older releases had unpadded tags (android-9) that sorted
+      # above newer ones, and no notes. Move each to a padded tag and write its notes.
+      - name: Tidy older releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for old in $(gh release list --limit 100 --json tagName -q '.[].tagName' | grep -E '^android-[0-9]{1,3}$' || true); do
+            n=${old#android-}
+            new=$(printf 'android-%04d' "$n")
+            ../scripts/release-notes.sh "" "$old" > old-notes.md
+            git push -q origin "$(git rev-list -n1 "$old"):refs/tags/$new"
+            gh release edit "$old" --tag "$new" --title "Kasita build $n" --notes-file old-notes.md
+            git push -q origin ":refs/tags/$old"
+            echo "moved $old -> $new"
+          done
