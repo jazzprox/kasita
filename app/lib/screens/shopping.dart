@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../main.dart';
+import '../offline_shopping.dart';
 import '../models.dart';
 import '../widgets.dart';
 
@@ -15,11 +18,75 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
   final _add = TextEditingController();
   List<ShoppingItem>? _items;
   int _seen = -1;
+  bool _offline = false; // showing the list saved on the phone
+  int _pending = 0; // changes waiting to be sent
+  Timer? _retry;
+
+  OfflineShopping _store() {
+    final s = Kasita.read(context);
+    return OfflineShopping(s.api, s.hid);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // while offline, try again every 20 s so queued changes go out as soon as there is signal
+    _retry = Timer.periodic(const Duration(seconds: 20), (_) {
+      if (_offline && mounted) _load();
+    });
+  }
+
+  @override
+  void dispose() {
+    _retry?.cancel();
+    super.dispose();
+  }
 
   Future<void> _load() async {
+    final off = _store();
     final s = Kasita.read(context);
-    final items = await s.api.shopping(s.hid, includeDone: true);
-    if (mounted) setState(() => _items = items);
+    try {
+      await off.flush();
+      final items = await s.api.shopping(s.hid, includeDone: true);
+      await off.save(items);
+      final pending = await off.pendingCount();
+      if (mounted) {
+        setState(() {
+          _items = items;
+          _offline = false;
+          _pending = pending;
+        });
+      }
+    } catch (e) {
+      if (!OfflineShopping.isOffline(e)) {
+        if (mounted) toast(context, '$e', error: true);
+        return;
+      }
+      final cached = await off.cached();
+      final pending = await off.pendingCount();
+      if (mounted) {
+        setState(() {
+          _items = _items ?? cached ?? [];
+          _offline = true;
+          _pending = pending;
+        });
+      }
+    }
+  }
+
+  /// Apply a change on screen and in the phone's copy, and queue it for the server.
+  Future<void> _queue(Map<String, dynamic> op, List<ShoppingItem> next) async {
+    final off = _store();
+    await off.enqueue(op);
+    await off.save(next);
+    final pending = await off.pendingCount();
+    if (mounted) {
+      setState(() {
+        _items = next;
+        _offline = true;
+        _pending = pending;
+      });
+    }
   }
 
   @override
@@ -35,20 +102,65 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
   /// "2x milk, bread, 3 eggs" adds three items.
   Future<void> _addText() async {
     final s = Kasita.read(context);
-    final parts = _add.text.split(',').map((p) => p.trim()).where((p) => p.isNotEmpty);
+    final parts = _add.text.split(',').map((p) => p.trim()).where((p) => p.isNotEmpty).toList();
+    _add.clear();
+    var wentOffline = false;
     for (final part in parts) {
       final m = RegExp(r'^(\d+(?:[.,]\d+)?)\s*x?\s+(.+)$', caseSensitive: false).firstMatch(part);
       final qty = m == null ? 1.0 : double.parse(m.group(1)!.replaceAll(',', '.'));
-      await s.api.addShopping(s.hid, name: m == null ? part : m.group(2)!, quantity: qty);
+      final name = m == null ? part : m.group(2)!;
+      try {
+        if (_offline) throw const _Offline();
+        await s.api.addShopping(s.hid, name: name, quantity: qty);
+      } catch (e) {
+        if (!OfflineShopping.isOffline(e)) {
+          if (mounted) toast(context, '$e', error: true);
+          continue;
+        }
+        wentOffline = true;
+        final id = 'local-${DateTime.now().microsecondsSinceEpoch}';
+        final item = ShoppingItem.fromJson({'id': id, 'name': name, 'quantity': qty, 'auto': false, 'done': false});
+        await _queue({'op': 'add', 'id': id, 'name': name, 'quantity': qty}, [...?_items, item]);
+      }
     }
-    _add.clear();
-    await _load();
+    if (!wentOffline) await _load();
   }
 
   Future<void> _toggle(ShoppingItem i) async {
     final s = Kasita.read(context);
-    setState(() => _items = [for (final x in _items!) x.id == i.id ? _flip(x) : x]);
-    await s.api.setShoppingDone(s.hid, i.id, !i.done);
+    final next = [for (final x in _items!) x.id == i.id ? _flip(x) : x];
+    setState(() => _items = next);
+    try {
+      if (_offline || i.id.startsWith('local-')) throw const _Offline();
+      await s.api.setShoppingDone(s.hid, i.id, !i.done);
+      await _store().save(next);
+    } catch (e) {
+      if (OfflineShopping.isOffline(e)) {
+        await _queue({'op': 'done', 'id': i.id, 'done': !i.done}, next);
+      } else if (mounted) {
+        toast(context, '$e', error: true);
+      }
+    }
+  }
+
+  Future<void> _delete(ShoppingItem i) async {
+    final s = Kasita.read(context);
+    final next = [
+      for (final x in _items!)
+        if (x.id != i.id) x,
+    ];
+    setState(() => _items = next);
+    try {
+      if (_offline || i.id.startsWith('local-')) throw const _Offline();
+      await s.api.deleteShopping(s.hid, i.id);
+      await _store().save(next);
+    } catch (e) {
+      if (OfflineShopping.isOffline(e)) {
+        await _queue({'op': 'delete', 'id': i.id}, next);
+      } else if (mounted) {
+        toast(context, '$e', error: true);
+      }
+    }
   }
 
   ShoppingItem _flip(ShoppingItem i) => i.copyWith(done: !i.done);
@@ -118,6 +230,7 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
             tooltip: 'Add everything that is running low',
             icon: const Icon(Icons.playlist_add),
             onPressed: () async {
+              if (_offline) return toast(context, 'Needs a connection');
               await s.api.refill(s.hid);
               await _load();
               if (context.mounted) toast(context, 'Added what is running low');
@@ -128,6 +241,7 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
               tooltip: 'Remove ticked items',
               icon: const Icon(Icons.cleaning_services_outlined),
               onPressed: () async {
+                if (_offline) return toast(context, 'Needs a connection');
                 await s.api.clearDone(s.hid);
                 await _load();
               },
@@ -149,6 +263,16 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
               ),
             ),
           ),
+          if (_offline)
+            MaterialBanner(
+              leading: const Icon(Icons.cloud_off),
+              content: Text(
+                _pending == 0
+                    ? 'Offline: showing the list saved on this phone.'
+                    : 'Offline: $_pending change${_pending == 1 ? '' : 's'} saved on this phone, sent when you have signal.',
+              ),
+              actions: [TextButton(onPressed: _load, child: const Text('Retry'))],
+            ),
           Expanded(
             child: _items == null
                 ? const Center(child: CircularProgressIndicator())
@@ -196,11 +320,7 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
         padding: const EdgeInsets.only(right: 20),
         child: Icon(Icons.delete_outline, color: cs.onErrorContainer),
       ),
-      onDismissed: (_) async {
-        final s = Kasita.read(context);
-        setState(() => _items!.removeWhere((x) => x.id == i.id));
-        await s.api.deleteShopping(s.hid, i.id);
-      },
+      onDismissed: (_) => _delete(i),
       child: CheckboxListTile(
         value: i.done,
         onChanged: (_) => _toggle(i),
@@ -213,4 +333,9 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
       ),
     );
   }
+}
+
+/// Thrown to take the offline path without trying the server (already offline, or a local-only item).
+class _Offline implements Exception {
+  const _Offline();
 }
