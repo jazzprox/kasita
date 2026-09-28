@@ -26,8 +26,12 @@ class _ScanScreenState extends State<ScanScreen> {
       BarcodeFormat.upcE,
       BarcodeFormat.code128,
     ],
-    detectionSpeed: DetectionSpeed.noDuplicates,
+    // every frame, not "only new codes": a code must be read twice in a row
+    // before it counts, so one misread frame (curved, shiny packs) can't get through
+    detectionSpeed: DetectionSpeed.normal,
+    detectionTimeoutMs: 150,
   );
+  String? _candidate;
   final _manual = TextEditingController();
   bool _busy = false;
 
@@ -190,7 +194,13 @@ class _ScanScreenState extends State<ScanScreen> {
                   controller: _controller,
                   onDetect: (capture) {
                     final code = capture.barcodes.map((b) => b.rawValue).whereType<String>().firstOrNull;
-                    if (code != null) _handle(code);
+                    if (code == null || _busy) return;
+                    if (code == _candidate) {
+                      _candidate = null;
+                      _handle(code);
+                    } else {
+                      _candidate = code; // first sighting: wait for a second identical read
+                    }
                   },
                   errorBuilder: (context, error) => Center(
                     child: Padding(

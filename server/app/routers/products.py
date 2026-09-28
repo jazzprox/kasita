@@ -100,7 +100,8 @@ def lookup_barcode(barcode: str, refresh: bool = False, a: HouseholdAccess = Dep
     return BarcodeLookupOut(barcode=code, product=product_out(db, link.product) if link else None, found=hit.found,
                             source=hit.source, name=hit.name, brand=hit.brand, quantity_text=hit.quantity_text,
                             image_url=hit.image_url, categories=hit.categories,
-                            category=categories.guess(hit.name, hit.categories))
+                            category=categories.guess(hit.name, hit.categories)
+                            or categories.SOURCE_DEFAULT.get(hit.source or ""))
 
 
 @router.get("/products/{product_id}/prices", response_model=list[PricePoint])

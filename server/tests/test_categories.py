@@ -30,3 +30,8 @@ def test_barcode_lookup_suggests_category(client, jazz):
     assert r["category"] == "Drinks"
     cats = client.get(f"/api/households/{hid}/categories", headers=h).json()
     assert cats[0] == "Produce" and "Personal care" in cats
+
+
+def test_beauty_database_defaults_to_personal_care():
+    from app.services.categories import SOURCE_DEFAULT
+    assert guess("AXE", None) is None and SOURCE_DEFAULT["openbeautyfacts"] == "Personal care"

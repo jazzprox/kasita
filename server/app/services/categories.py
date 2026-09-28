@@ -13,6 +13,9 @@ CATEGORIES = [
     "Frozen", "Personal care", "Household & cleaning", "Baby", "Pet", "Health", "Other",
 ]
 
+# when neither the name nor the category text says anything: what the source database itself holds
+SOURCE_DEFAULT = {"openbeautyfacts": "Personal care"}
+
 _RULES: list[tuple[str, list[str]]] = [
     ("Drinks", ["root beer", "ginger beer", "ginger ale", "non-alcoholic", "alcohol-free"]),
     ("Alcohol", ["beer", "wine", "rum", "whisky", "whiskey", "vodka", "gin", "tequila", "liqueur", "cerveza",
