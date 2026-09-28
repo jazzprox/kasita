@@ -19,7 +19,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
   final _form = GlobalKey<FormState>();
   late final _name = TextEditingController(text: widget.product?.name ?? widget.prefill?.name ?? '');
   late final _brand = TextEditingController(text: widget.product?.brand ?? widget.prefill?.brand ?? '');
-  late final _category = TextEditingController(text: widget.product?.category ?? '');
+  late final _category = TextEditingController(text: widget.product?.category ?? widget.prefill?.category ?? '');
+  List<String> _categories = const [];
   late final _unit = TextEditingController(text: widget.product?.unit ?? 'pcs');
   late final _min = TextEditingController(text: widget.product == null ? '0' : fmtQty(widget.product!.minStock));
   late final _shelf = TextEditingController(text: widget.product?.shelfLifeDays?.toString() ?? '');
@@ -27,6 +28,20 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
   bool _busy = false;
 
   bool get _editing => widget.product != null;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final s = Kasita.read(context);
+      try {
+        final c = await s.api.categories(s.hid);
+        if (mounted) setState(() => _categories = c);
+      } catch (_) {
+        // the field still accepts free text without the list
+      }
+    });
+  }
 
   Future<void> _save() async {
     if (!_form.currentState!.validate()) return;
@@ -95,9 +110,19 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
               decoration: const InputDecoration(labelText: 'Brand', border: OutlineInputBorder()),
             ),
             const SizedBox(height: 12),
-            TextFormField(
-              controller: _category,
-              decoration: const InputDecoration(labelText: 'Category (e.g. Dairy)', border: OutlineInputBorder()),
+            LayoutBuilder(
+              builder: (context, box) => DropdownMenu<String>(
+                controller: _category,
+                width: box.maxWidth,
+                label: const Text('Category'),
+                helperText: widget.prefill?.category != null && !_editing
+                    ? 'Suggested from the product; change it if needed'
+                    : null,
+                enableFilter: false,
+                requestFocusOnTap: true,
+                dropdownMenuEntries: [for (final c in _categories) DropdownMenuEntry(value: c, label: c)],
+                onSelected: (c) => _category.text = c ?? '',
+              ),
             ),
             const SizedBox(height: 12),
             Row(

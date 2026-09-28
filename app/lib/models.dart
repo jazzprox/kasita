@@ -100,7 +100,7 @@ class BarcodeResult {
   final String barcode;
   final Product? product;
   final bool found;
-  final String? source, name, brand, quantityText, imageUrl, categories;
+  final String? source, name, brand, quantityText, imageUrl, categories, category;
   BarcodeResult.fromJson(Map<String, dynamic> j)
     : barcode = j['barcode'],
       product = j['product'] == null ? null : Product.fromJson(j['product']),
@@ -110,7 +110,8 @@ class BarcodeResult {
       brand = j['brand'],
       quantityText = j['quantity_text'],
       imageUrl = j['image_url'],
-      categories = j['categories'];
+      categories = j['categories'],
+      category = j['category'];
 }
 
 class PricePoint {

@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session
 from ..config import settings
 from ..db import SessionLocal
 from ..models import Product, Receipt, ReceiptAlias, ReceiptLine, Store
-from . import chatgpt, codex
+from . import categories, chatgpt, codex
 from . import stock as stock_svc
 
 log = logging.getLogger(__name__)
@@ -223,8 +223,9 @@ def confirm(db: Session, receipt: Receipt, user_id: str | None, *, create_missin
                 skipped += 1
                 continue
             weighed = line.quantity != line.quantity.to_integral_value()
-            product = Product(household_id=hid, name=(line.name or line.raw_text.title())[:255],
-                              unit="kg" if weighed else "pcs")
+            name = (line.name or line.raw_text.title())[:255]
+            product = Product(household_id=hid, name=name, unit="kg" if weighed else "pcs",
+                              category=categories.guess(name))
             db.add(product)
             db.flush()
             line.product_id = product.id

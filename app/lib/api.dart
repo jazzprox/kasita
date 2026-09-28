@@ -196,6 +196,7 @@ class Api {
       Product.fromJson(await patch('${_h(hid)}/products/$pid', body));
   Future<List<PricePoint>> prices(String hid, String pid) async =>
       (await get('${_h(hid)}/products/$pid/prices') as List).map((e) => PricePoint.fromJson(e)).toList();
+  Future<List<String>> categories(String hid) async => List<String>.from(await get('${_h(hid)}/categories'));
   Future<BarcodeResult> barcode(String hid, String code) async =>
       BarcodeResult.fromJson(await get('${_h(hid)}/barcodes/${Uri.encodeComponent(code)}'));
 

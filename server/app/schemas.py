@@ -169,7 +169,8 @@ class BarcodeLookupOut(BaseModel):
     brand: str | None = None
     quantity_text: str | None = None
     image_url: str | None = None
-    categories: str | None = None
+    categories: str | None = None  # the database's own text, e.g. "Colas, Sodas"
+    category: str | None = None    # Kasita's category: the product's own, else a guess
 
 
 # --- stock ------------------------------------------------------------------

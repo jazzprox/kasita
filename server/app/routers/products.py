@@ -7,6 +7,7 @@ from ..deps import HouseholdAccess, household_access
 from ..models import Product, ProductBarcode, StockEntry, StockEvent, Store
 from ..schemas import BarcodeLookupOut, PricePoint, ProductIn, ProductOut, ProductPatch
 from ..services import barcodes as bc
+from ..services import categories
 from ..services.stock import get_product, in_stock
 
 router = APIRouter(prefix="/api/households/{household_id}", tags=["products"])
@@ -93,11 +94,13 @@ def lookup_barcode(barcode: str, refresh: bool = False, a: HouseholdAccess = Dep
                                                   ProductBarcode.barcode == code))
     if link and not refresh:
         return BarcodeLookupOut(barcode=code, product=product_out(db, link.product), found=True, source="household",
-                                name=link.product.name, brand=link.product.brand, image_url=link.product.image_url)
+                                name=link.product.name, brand=link.product.brand, image_url=link.product.image_url,
+                                category=link.product.category)
     hit = bc.lookup(db, code, refresh=refresh)
     return BarcodeLookupOut(barcode=code, product=product_out(db, link.product) if link else None, found=hit.found,
                             source=hit.source, name=hit.name, brand=hit.brand, quantity_text=hit.quantity_text,
-                            image_url=hit.image_url, categories=hit.categories)
+                            image_url=hit.image_url, categories=hit.categories,
+                            category=categories.guess(hit.name, hit.categories))
 
 
 @router.get("/products/{product_id}/prices", response_model=list[PricePoint])
@@ -109,3 +112,11 @@ def price_history(product_id: str, a: HouseholdAccess = Depends(household_access
     ).order_by(StockEvent.at.desc())).all()
     return [PricePoint(at=e.at, unit_price=e.unit_price, quantity=e.quantity, store_id=e.store_id, store_name=name)
             for e, name in rows]
+
+
+@router.get("/categories", response_model=list[str])
+def category_list(a: HouseholdAccess = Depends(household_access), db: Session = Depends(get_db)):
+    """Kasita's categories plus any other ones this household already uses."""
+    used = db.scalars(select(Product.category).where(Product.household_id == a.household.id,
+                                                     Product.category.is_not(None)).distinct()).all()
+    return categories.CATEGORIES + sorted(c for c in used if c and c not in categories.CATEGORIES)
