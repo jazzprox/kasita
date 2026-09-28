@@ -25,6 +25,12 @@ class RefreshIn(BaseModel):
     refresh_token: str
 
 
+class ChangePasswordIn(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=10, max_length=200)
+    device: str = ""
+
+
 class AcceptInviteIn(BaseModel):
     token: str
     # only needed when the invitee has no account yet

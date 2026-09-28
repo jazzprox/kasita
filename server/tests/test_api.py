@@ -118,3 +118,21 @@ def test_refresh_token_rotates(client):
     r1 = client.post("/api/auth/refresh", json={"refresh_token": t["refresh_token"]})
     assert r1.status_code == 200
     assert client.post("/api/auth/refresh", json={"refresh_token": t["refresh_token"]}).status_code == 401
+
+
+def test_change_password_signs_out_other_devices(client):
+    email, pw = make_user(email="pw@example.com")
+    phone = client.post("/api/auth/login", json={"email": email, "password": pw}).json()
+    laptop = client.post("/api/auth/login", json={"email": email, "password": pw}).json()
+    h = {"Authorization": f"Bearer {laptop['access_token']}"}
+    url = "/api/auth/change-password"
+    assert client.post(url, headers=h, json={"current_password": "nope", "new_password": "a-new-long-password"}).status_code == 400
+    assert client.post(url, headers=h, json={"current_password": pw, "new_password": "short"}).status_code == 422
+    r = client.post(url, headers=h, json={"current_password": pw, "new_password": "a-new-long-password"})
+    assert r.status_code == 200 and r.json()["refresh_token"]
+    # every old session is gone, the new one works, and only the new password logs in
+    assert client.post("/api/auth/refresh", json={"refresh_token": phone["refresh_token"]}).status_code == 401
+    assert client.post("/api/auth/refresh", json={"refresh_token": laptop["refresh_token"]}).status_code == 401
+    assert client.post("/api/auth/refresh", json={"refresh_token": r.json()["refresh_token"]}).status_code == 200
+    assert client.post("/api/auth/login", json={"email": email, "password": pw}).status_code == 401
+    assert client.post("/api/auth/login", json={"email": email, "password": "a-new-long-password"}).status_code == 200

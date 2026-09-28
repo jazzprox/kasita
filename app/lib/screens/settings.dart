@@ -134,6 +134,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const Divider(),
           ListTile(leading: const Icon(Icons.dns_outlined), title: const Text('Server'), subtitle: Text(s.api.server)),
           ListTile(
+            leading: const Icon(Icons.password),
+            title: const Text('Change password'),
+            subtitle: const Text('Signs out your other devices'),
+            onTap: () => showDialog(context: context, builder: (_) => const _ChangePasswordDialog()),
+          ),
+          ListTile(
             leading: const Icon(Icons.logout),
             title: const Text('Sign out'),
             onTap: () async {
@@ -152,6 +158,78 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _ChangePasswordDialog extends StatefulWidget {
+  const _ChangePasswordDialog();
+  @override
+  State<_ChangePasswordDialog> createState() => _ChangePasswordDialogState();
+}
+
+class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
+  final _current = TextEditingController();
+  final _next = TextEditingController();
+  final _again = TextEditingController();
+  String? _error;
+  bool _busy = false;
+
+  Future<void> _save() async {
+    if (_next.text.length < 10) return setState(() => _error = 'Use at least 10 characters');
+    if (_next.text != _again.text) return setState(() => _error = 'The new passwords do not match');
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await Kasita.read(context).api.changePassword(_current.text, _next.text);
+      if (!mounted) return;
+      Navigator.pop(context);
+      toast(context, 'Password changed. Other devices were signed out.');
+    } on ApiException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Change password'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _current,
+            obscureText: true,
+            autofillHints: const [AutofillHints.password],
+            decoration: const InputDecoration(labelText: 'Current password'),
+          ),
+          TextField(
+            controller: _next,
+            obscureText: true,
+            autofillHints: const [AutofillHints.newPassword],
+            decoration: const InputDecoration(labelText: 'New password', helperText: 'At least 10 characters'),
+          ),
+          TextField(
+            controller: _again,
+            obscureText: true,
+            decoration: const InputDecoration(labelText: 'New password again'),
+            onSubmitted: (_) => _busy ? null : _save(),
+          ),
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            ),
+        ],
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        FilledButton(onPressed: _busy ? null : _save, child: const Text('Change')),
+      ],
     );
   }
 }

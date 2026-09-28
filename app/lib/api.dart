@@ -65,6 +65,16 @@ class Api {
     await _saveTokens(_decode(r));
   }
 
+  /// Signs out every other device; this one continues with the fresh session returned.
+  Future<void> changePassword(String current, String next) async {
+    final t = await post('/api/auth/change-password', {
+      'current_password': current,
+      'new_password': next,
+      'device': 'kasita-app',
+    });
+    await _saveTokens(Map<String, dynamic>.from(t));
+  }
+
   Future<void> logout() async {
     final refresh = _refresh;
     _access = null;

@@ -6,9 +6,9 @@ from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..db import get_db
-from ..deps import current_user
+from ..deps import Caller, current_user, get_caller
 from ..models import Invite, Membership, RefreshToken, User
-from ..schemas import AcceptInviteIn, LoginIn, RefreshIn, TokensOut, UserOut
+from ..schemas import AcceptInviteIn, ChangePasswordIn, LoginIn, RefreshIn, TokensOut, UserOut
 from ..security import hash_password, make_access_token, new_token, token_hash, verify_password
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -44,6 +44,23 @@ def refresh(body: RefreshIn, db: Session = Depends(get_db)):
     row.revoked_at = now
     user = db.get(User, row.user_id)
     return issue_tokens(db, user, row.device)
+
+
+@router.post("/change-password", response_model=TokensOut)
+def change_password(body: ChangePasswordIn, caller: Caller = Depends(get_caller), db: Session = Depends(get_db)):
+    """Needs the current password. Signs out every device, then returns a fresh session for this one."""
+    if caller.api_key_household:
+        raise HTTPException(403, "API keys cannot change a password")
+    user = db.get(User, caller.user.id)
+    if not verify_password(body.current_password, user.password_hash):
+        raise HTTPException(400, "Current password is wrong")
+    if body.new_password == body.current_password:
+        raise HTTPException(400, "The new password must be different")
+    user.password_hash = hash_password(body.new_password)
+    now = datetime.now(timezone.utc)
+    for row in db.scalars(select(RefreshToken).where(RefreshToken.user_id == user.id, RefreshToken.revoked_at.is_(None))):
+        row.revoked_at = now
+    return issue_tokens(db, user, body.device)
 
 
 @router.post("/logout", status_code=204)
