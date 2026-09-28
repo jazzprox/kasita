@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 
+import '../api.dart';
+
 import '../main.dart';
 import '../models.dart';
 import '../widgets.dart';
 import 'actions.dart';
+import 'product_picker.dart';
 import 'product_form.dart';
 
 class ProductDetailScreen extends StatefulWidget {
@@ -18,6 +21,22 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   List<StockEntry> _entries = [];
   List<PricePoint> _prices = [];
   int _seen = -1;
+
+  Future<void> _addBarcode() async {
+    final s = Kasita.read(context);
+    final code = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => ScanOneBarcodeScreen(title: 'Barcode for ${_p?.name ?? 'this product'}')),
+    );
+    if (code == null || code.isEmpty || !mounted) return;
+    try {
+      await s.api.addBarcode(s.hid, widget.productId, code);
+      s.changed();
+      if (mounted) toast(context, 'Barcode $code added');
+      _load();
+    } on ApiException catch (e) {
+      if (mounted) toast(context, e.message, error: true);
+    }
+  }
 
   Future<void> _load() async {
     final s = Kasita.read(context);
@@ -154,12 +173,21 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               subtitle: Text(pr.storeName ?? 'unknown store'),
               trailing: Text(dateFmtYear.format(pr.at.toLocal())),
             ),
-          if (p.barcodes.isNotEmpty) ...[
-            const SizedBox(height: 24),
-            Text('Barcodes', style: t.textTheme.titleMedium),
-            const SizedBox(height: 4),
-            Text(p.barcodes.join(', '), style: TextStyle(color: t.colorScheme.onSurfaceVariant)),
-          ],
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              Expanded(child: Text('Barcodes', style: t.textTheme.titleMedium)),
+              TextButton.icon(
+                onPressed: _addBarcode,
+                icon: const Icon(Icons.qr_code_scanner),
+                label: const Text('Add barcode'),
+              ),
+            ],
+          ),
+          Text(
+            p.barcodes.isEmpty ? 'None yet: add one so scanning finds this product.' : p.barcodes.join(', '),
+            style: TextStyle(color: t.colorScheme.onSurfaceVariant),
+          ),
         ],
       ),
     );

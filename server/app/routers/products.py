@@ -76,8 +76,16 @@ def update_product(product_id: str, body: ProductPatch, a: HouseholdAccess = Dep
 @router.post("/products/{product_id}/barcodes", response_model=ProductOut)
 def add_barcode(product_id: str, barcode: str = Query(...), a: HouseholdAccess = Depends(household_access),
                 db: Session = Depends(get_db)):
+    """Attach a barcode (e.g. to a product that came from a receipt). Fills in the photo, brand and
+    category from the product databases where the product has none yet; never overwrites."""
     p = get_product(db, a.household.id, product_id)
     _attach_barcodes(db, a.household.id, p, [barcode])
+    hit = bc.lookup(db, bc.normalise(barcode) or barcode)
+    if hit.found:
+        p.image_url = p.image_url or hit.image_url
+        p.brand = p.brand or hit.brand
+        p.category = p.category or categories.guess(hit.name, hit.categories) \
+            or categories.SOURCE_DEFAULT.get(hit.source or "")
     db.commit()
     db.refresh(p)
     return product_out(db, p)

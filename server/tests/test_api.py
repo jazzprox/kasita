@@ -136,3 +136,15 @@ def test_change_password_signs_out_other_devices(client):
     assert client.post("/api/auth/refresh", json={"refresh_token": r.json()["refresh_token"]}).status_code == 200
     assert client.post("/api/auth/login", json={"email": email, "password": pw}).status_code == 401
     assert client.post("/api/auth/login", json={"email": email, "password": "a-new-long-password"}).status_code == 200
+
+
+def test_attach_barcode_to_receipt_product_fills_gaps(client, jazz):
+    h, hid = jazz
+    p = client.post(f"/api/households/{hid}/products", json={"name": "Cola from receipt"}, headers=h).json()
+    r = client.post(f"/api/households/{hid}/products/{p['id']}/barcodes", params={"barcode": "5449000000996"}, headers=h)
+    assert r.status_code == 200, r.text
+    out = r.json()
+    assert out["barcodes"] == ["5449000000996"] and out["brand"] == "Coca-Cola" and out["category"] == "Drinks"
+    assert out["name"] == "Cola from receipt"  # the household's own name is kept
+    # scanning it now finds the household product
+    assert client.get(f"/api/households/{hid}/barcodes/5449000000996", headers=h).json()["product"]["id"] == p["id"]

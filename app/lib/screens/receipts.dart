@@ -10,6 +10,7 @@ import '../main.dart';
 import '../models.dart';
 import '../widgets.dart';
 import 'chatgpt.dart';
+import 'product_picker.dart';
 import 'securo.dart';
 
 final _money = NumberFormat('#,##0.00');
@@ -579,8 +580,9 @@ class _LineEditorState extends State<_LineEditor> {
   double? _n(String v) => double.tryParse(v.replaceAll(',', '.').trim());
 
   Future<void> _chooseProduct() async {
-    final picked = await Navigator.of(context)
-        .push<Product>(MaterialPageRoute(builder: (_) => _ProductPicker(initialQuery: _name.text)));
+    final picked = await Navigator.of(
+      context,
+    ).push<Product>(MaterialPageRoute(builder: (_) => ProductPicker(hint: 'Search products (receipt: ${_name.text})')));
     if (picked != null) {
       setState(() {
         _productId = picked.id;
@@ -717,72 +719,6 @@ class _LineEditorState extends State<_LineEditor> {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _ProductPicker extends StatefulWidget {
-  final String initialQuery;
-  const _ProductPicker({required this.initialQuery});
-  @override
-  State<_ProductPicker> createState() => _ProductPickerState();
-}
-
-class _ProductPickerState extends State<_ProductPicker> {
-  List<Product>? _all;
-  String _q = '';
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final s = Kasita.read(context);
-      final all = await s.api.products(s.hid);
-      if (mounted) setState(() => _all = all);
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final q = _q.toLowerCase();
-    final list = (_all ?? [])
-        .where((p) => q.isEmpty || '${p.name} ${p.brand ?? ''}'.toLowerCase().contains(q))
-        .toList();
-    return Scaffold(
-      appBar: AppBar(title: const Text('Which product?')),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: SearchBar(
-              hintText: 'Search products (receipt: ${widget.initialQuery})',
-              leading: const Icon(Icons.search),
-              autoFocus: true,
-              onChanged: (v) => setState(() => _q = v),
-            ),
-          ),
-          Expanded(
-            child: _all == null
-                ? const Center(child: CircularProgressIndicator())
-                : ListView(
-                    children: [
-                      for (final p in list)
-                        ListTile(
-                          leading: ProductThumb(p.imageUrl),
-                          title: Text(p.name),
-                          subtitle: Text([p.brand, p.category].whereType<String>().join(' · ')),
-                          onTap: () => Navigator.pop(context, p),
-                        ),
-                      if (list.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.all(24),
-                          child: Text('No match. Go back and leave it as a new product.', textAlign: TextAlign.center),
-                        ),
-                    ],
-                  ),
-          ),
-        ],
       ),
     );
   }
