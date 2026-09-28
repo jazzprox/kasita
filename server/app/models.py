@@ -288,3 +288,42 @@ class Integration(Base):
     kind: Mapped[str] = mapped_column(String(32))  # chatgpt | securo
     data: Mapped[dict] = mapped_column(JSON, default=dict)  # tokens are encrypted before they get here
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
+
+
+
+class Recipe(Base):
+    """A saved meal: from a 'What can I cook?' idea or typed in."""
+    __tablename__ = "recipes"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    household_id: Mapped[str] = mapped_column(ForeignKey("households.id", ondelete="CASCADE"), index=True)
+    title: Mapped[str] = mapped_column(String(160))
+    minutes: Mapped[int | None]
+    steps: Mapped[list] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+    ingredients: Mapped[list["RecipeIngredient"]] = relationship(back_populates="recipe", cascade="all, delete-orphan",
+                                                                 order_by="RecipeIngredient.position")
+
+
+class RecipeIngredient(Base):
+    """One thing a recipe needs: one of the household's products, or just a name (bought when needed)."""
+    __tablename__ = "recipe_ingredients"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    recipe_id: Mapped[str] = mapped_column(ForeignKey("recipes.id", ondelete="CASCADE"), index=True)
+    position: Mapped[int] = mapped_column(default=0)
+    name: Mapped[str] = mapped_column(String(160))
+    product_id: Mapped[str | None] = mapped_column(ForeignKey("products.id", ondelete="SET NULL"))
+    quantity: Mapped[Decimal] = mapped_column(Qty, default=1)  # in the product's unit; what 'Cooked it' takes
+
+    recipe: Mapped[Recipe] = relationship(back_populates="ingredients")
+
+
+class MealPlan(Base):
+    """What's for dinner on a day (one planned meal per day)."""
+    __tablename__ = "meal_plan"
+    __table_args__ = (UniqueConstraint("household_id", "day"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    household_id: Mapped[str] = mapped_column(ForeignKey("households.id", ondelete="CASCADE"))
+    day: Mapped[date] = mapped_column(Date)
+    recipe_id: Mapped[str | None] = mapped_column(ForeignKey("recipes.id", ondelete="SET NULL"))
+    note: Mapped[str | None] = mapped_column(String(160))  # "leftovers", "eating out"...

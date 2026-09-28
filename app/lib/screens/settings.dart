@@ -8,6 +8,7 @@ import '../widgets.dart';
 import 'activity.dart';
 import 'chatgpt.dart';
 import 'receipts.dart';
+import 'recipes.dart';
 import 'securo.dart';
 import 'spending.dart';
 
@@ -129,6 +130,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: const Text('Receipts'),
             subtitle: const Text('Photograph a receipt to fill the pantry with prices'),
             onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ReceiptsScreen())),
+          ),
+          ListTile(
+            leading: const Icon(Icons.menu_book_outlined),
+            title: const Text('Recipes'),
+            subtitle: const Text('Saved meals, Cooked it'),
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const RecipesScreen())),
+          ),
+          ListTile(
+            leading: const Icon(Icons.calendar_month_outlined),
+            title: const Text('Week plan'),
+            subtitle: const Text("What's for dinner, and what to buy for it"),
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const WeekPlanScreen())),
           ),
           ListTile(
             leading: const Icon(Icons.history),

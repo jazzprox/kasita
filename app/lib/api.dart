@@ -242,6 +242,24 @@ class Api {
   ];
   Future<Household> updateHousehold(String hid, Map<String, dynamic> body) async =>
       Household.fromJson(await patch('/api/households/$hid', body));
+  // --- recipes & week plan --------------------------------------------------
+  Future<List<Map<String, dynamic>>> recipes(String hid) async => [
+    for (final r in await get('${_h(hid)}/recipes') as List) Map<String, dynamic>.from(r),
+  ];
+  Future<Map<String, dynamic>> recipe(String hid, String id) async =>
+      Map<String, dynamic>.from(await get('${_h(hid)}/recipes/$id'));
+  Future<Map<String, dynamic>> saveRecipe(String hid, Map<String, dynamic> body) async =>
+      Map<String, dynamic>.from(await post('${_h(hid)}/recipes', body));
+  Future<void> deleteRecipe(String hid, String id) => delete('${_h(hid)}/recipes/$id');
+  Future<Map<String, dynamic>> cooked(String hid, String id, List<Map<String, dynamic>> items) async =>
+      Map<String, dynamic>.from(await post('${_h(hid)}/recipes/$id/cooked', {'items': items}));
+  Future<List<Map<String, dynamic>>> plan(String hid) async => [
+    for (final d in await get('${_h(hid)}/plan') as List) Map<String, dynamic>.from(d),
+  ];
+  Future<void> setPlan(String hid, String day, {String? recipeId, String? note}) =>
+      _send('PUT', '${_h(hid)}/plan/$day', body: {'recipe_id': recipeId, 'note': note});
+  Future<List<String>> planToShopping(String hid) async =>
+      List<String>.from((await post('${_h(hid)}/plan/shopping') as Map)['added']);
   Future<void> undoStock(String hid, List<String> eventIds) => post('${_h(hid)}/stock/undo', {'event_ids': eventIds});
   Future<Map<String, dynamic>> consume(String hid, String pid, double qty, {bool spoiled = false}) async =>
       Map<String, dynamic>.from(

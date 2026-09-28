@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../api.dart';
 import '../main.dart';
 import '../widgets.dart';
+import 'recipes.dart';
 
 /// Meal ideas from what is at home (soon-expiring things first), by the household's ChatGPT.
 class CookScreen extends StatefulWidget {
@@ -32,6 +33,26 @@ class _CookScreenState extends State<CookScreen> {
     }
   }
 
+  final _saved = <String, Map<String, dynamic>>{};
+
+  Future<Map<String, dynamic>?> _save(Map<String, dynamic> idea) async {
+    final s = Kasita.read(context);
+    try {
+      final r = await s.api.saveRecipe(s.hid, {
+        'title': idea['title'],
+        'minutes': idea['minutes'],
+        'steps': idea['steps'],
+        'uses': idea['uses'],
+        'missing': idea['missing'],
+      });
+      if (mounted) setState(() => _saved[idea['title']] = r);
+      return r;
+    } on ApiException catch (e) {
+      if (mounted) toast(context, e.message, error: true);
+      return null;
+    }
+  }
+
   Future<void> _addMissing(Map<String, dynamic> idea) async {
     final s = Kasita.read(context);
     for (final m in List<String>.from(idea['missing'] ?? const [])) {
@@ -47,7 +68,16 @@ class _CookScreenState extends State<CookScreen> {
   Widget build(BuildContext context) {
     final t = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('What can I cook?')),
+      appBar: AppBar(
+        title: const Text('What can I cook?'),
+        actions: [
+          IconButton(
+            tooltip: 'Saved recipes',
+            icon: const Icon(Icons.menu_book_outlined),
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const RecipesScreen())),
+          ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -101,6 +131,23 @@ class _CookScreenState extends State<CookScreen> {
                             ? const Icon(Icons.check)
                             : TextButton(onPressed: () => _addMissing(idea), child: const Text('Add to list')),
                       ),
+                    Row(
+                      children: [
+                        TextButton.icon(
+                          onPressed: _saved.containsKey(idea['title']) ? null : () => _save(idea),
+                          icon: Icon(_saved.containsKey(idea['title']) ? Icons.bookmark : Icons.bookmark_add_outlined),
+                          label: Text(_saved.containsKey(idea['title']) ? 'Saved' : 'Save recipe'),
+                        ),
+                        TextButton.icon(
+                          onPressed: () async {
+                            final r = _saved[idea['title']] ?? await _save(idea);
+                            if (r != null && context.mounted) await planRecipe(context, r);
+                          },
+                          icon: const Icon(Icons.calendar_month_outlined),
+                          label: const Text('Plan it'),
+                        ),
+                      ],
+                    ),
                     ExpansionTile(
                       tilePadding: EdgeInsets.zero,
                       title: const Text('Steps'),
