@@ -18,7 +18,9 @@ class ProductFormScreen extends StatefulWidget {
 class _ProductFormScreenState extends State<ProductFormScreen> {
   final _form = GlobalKey<FormState>();
   late final _name = TextEditingController(text: widget.product?.name ?? widget.prefill?.name ?? '');
-  late final _brand = TextEditingController(text: widget.product?.brand ?? widget.prefill?.brand ?? '');
+  late final _brand = TextEditingController(
+    text: widget.product?.brand ?? widget.prefill?.brand ?? widget.prefill?.brandHint ?? '',
+  );
   late final _category = TextEditingController(text: widget.product?.category ?? widget.prefill?.category ?? '');
   List<String> _categories = const [];
   late final _unit = TextEditingController(text: widget.product?.unit ?? 'pcs');

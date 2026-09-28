@@ -110,7 +110,8 @@ def lookup_barcode(barcode: str, refresh: bool = False, a: HouseholdAccess = Dep
                                 name=link.product.name, brand=link.product.brand, image_url=link.product.image_url,
                                 category=link.product.category)
     hit = bc.lookup(db, code, refresh=refresh)
-    return BarcodeLookupOut(barcode=code, product=product_out(db, link.product) if link else None, found=hit.found,
+    hint = None if hit.found else bc.brand_hint(db, a.household.id, code)
+    return BarcodeLookupOut(brand_hint=hint, barcode=code, product=product_out(db, link.product) if link else None, found=hit.found,
                             source=hit.source, name=hit.name, brand=hit.brand, quantity_text=hit.quantity_text,
                             image_url=hit.image_url, categories=hit.categories,
                             category=categories.guess(hit.name, hit.categories)

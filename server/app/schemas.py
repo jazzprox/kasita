@@ -171,6 +171,7 @@ class BarcodeLookupOut(BaseModel):
     image_url: str | None = None
     categories: str | None = None  # the database's own text, e.g. "Colas, Sodas"
     category: str | None = None    # Kasita's category: the product's own, else a guess
+    brand_hint: str | None = None  # unknown barcode: the maker, from its company prefix
 
 
 # --- stock ------------------------------------------------------------------
@@ -253,6 +254,7 @@ class ShoppingOut(ORM):
     id: str
     name: str
     product_id: str | None
+    category: str | None = None  # the product's, or guessed from a free-text name
     quantity: Decimal
     note: str | None
     auto: bool

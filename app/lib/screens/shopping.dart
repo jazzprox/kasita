@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../main.dart';
 import '../models.dart';
@@ -50,15 +51,53 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
     await s.api.setShoppingDone(s.hid, i.id, !i.done);
   }
 
-  ShoppingItem _flip(ShoppingItem i) => ShoppingItem.fromJson({
-    'id': i.id,
-    'name': i.name,
-    'product_id': i.productId,
-    'note': i.note,
-    'quantity': i.quantity,
-    'auto': i.auto,
-    'done': !i.done,
-  });
+  ShoppingItem _flip(ShoppingItem i) => i.copyWith(done: !i.done);
+
+  /// Store-walk order; anything else (or no category) comes last as "Other".
+  static const _order = [
+    'Produce',
+    'Bakery',
+    'Meat & fish',
+    'Dairy & eggs',
+    'Pantry',
+    'Snacks & sweets',
+    'Drinks',
+    'Alcohol',
+    'Frozen',
+    'Personal care',
+    'Household & cleaning',
+    'Baby',
+    'Pet',
+    'Health',
+  ];
+
+  /// Open items grouped by category, groups in store-walk order.
+  List<(String, List<ShoppingItem>)> _groups(List<ShoppingItem> open) {
+    final by = <String, List<ShoppingItem>>{};
+    for (final i in open) {
+      final c = _order.contains(i.category) ? i.category! : 'Other';
+      by.putIfAbsent(c, () => []).add(i);
+    }
+    return [
+      for (final c in [..._order, 'Other'])
+        if (by[c] != null) (c, by[c]!),
+    ];
+  }
+
+  String _asText(List<ShoppingItem> open) {
+    final lines = <String>['Shopping list'];
+    for (final (cat, items) in _groups(open)) {
+      lines
+        ..add('')
+        ..add(cat);
+      for (final i in items) {
+        lines.add(
+          '• ${i.quantity == 1 ? '' : '${fmtQty(i.quantity)}× '}${i.name}${i.note == null ? '' : ' (${i.note})'}',
+        );
+      }
+    }
+    return lines.join('\n');
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -69,6 +108,12 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
       appBar: AppBar(
         title: const Text('Shopping list'),
         actions: [
+          if (open.isNotEmpty)
+            IconButton(
+              tooltip: 'Share the list (WhatsApp, messages...)',
+              icon: const Icon(Icons.share_outlined),
+              onPressed: () => SharePlus.instance.share(ShareParams(text: _asText(open))),
+            ),
           IconButton(
             tooltip: 'Add everything that is running low',
             icon: const Icon(Icons.playlist_add),
@@ -117,7 +162,17 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
                     onRefresh: _load,
                     child: ListView(
                       children: [
-                        for (final i in open) _tile(i),
+                        for (final (cat, items) in _groups(open)) ...[
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 14, 16, 2),
+                            child: Text(
+                              cat,
+                              style: Theme.of(context).textTheme.labelLarge
+                                  ?.copyWith(color: Theme.of(context).colorScheme.primary),
+                            ),
+                          ),
+                          for (final i in items) _tile(i),
+                        ],
                         if (done.isNotEmpty) const Divider(),
                         for (final i in done) _tile(i),
                         const SizedBox(height: 80),

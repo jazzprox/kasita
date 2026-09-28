@@ -12,6 +12,7 @@ import re
 from datetime import datetime, timedelta, timezone
 
 import httpx
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..config import settings
@@ -244,3 +245,44 @@ def lookup(db: Session, barcode: str, *, refresh: bool = False, fetch=None) -> B
     db.merge(row)
     db.commit()
     return db.get(BarcodeCache, barcode)
+
+
+def _gtin13(code: str) -> str | None:
+    return code.rjust(13, "0") if code.isdigit() and len(code) in (12, 13) else None
+
+
+def brand_hint(db: Session, household_id: str, barcode: str) -> str | None:
+    """The maker of an unknown barcode, from its GS1 company prefix.
+
+    Every barcode starts with its owner's company number (041224... = Roland). If
+    known products (this household's, or found in the public databases) share a long
+    enough start with it AND all agree on one brand, that brand is a safe guess.
+    US/Canada codes (leading 0) need 7 shared digits, others 8 (their prefixes are longer).
+    """
+    from ..models import Product, ProductBarcode  # local: models import this module's settings
+    target = _gtin13(barcode)
+    if not target:
+        return None
+    pairs = [(b, br) for b, br in db.execute(
+        select(ProductBarcode.barcode, Product.brand).join(Product, Product.id == ProductBarcode.product_id)
+        .where(ProductBarcode.household_id == household_id, Product.brand.is_not(None)))]
+    pairs += [(b, br) for b, br in db.execute(
+        select(BarcodeCache.barcode, BarcodeCache.brand).where(BarcodeCache.found.is_(True),
+                                                             BarcodeCache.brand.is_not(None)))]
+    need = 7 if target.startswith("0") else 8
+    best, brands = 0, set()
+    for code, brand in pairs:
+        other = _gtin13(code)
+        if not other or other == target:
+            continue
+        n = 0
+        while n < 12 and other[n] == target[n]:
+            n += 1
+        if n < need:
+            continue
+        name = brand.split(",")[0].strip()
+        if n > best:
+            best, brands = n, {name.lower(): name}
+        elif n == best:
+            brands[name.lower()] = name
+    return next(iter(brands.values())) if best and len(brands) == 1 else None

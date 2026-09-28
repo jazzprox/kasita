@@ -14,12 +14,34 @@ Future<void> consumeOne(BuildContext context, Product p, {double qty = 1, bool s
     if (!context.mounted) return;
     final left = double.tryParse(r['remaining'].toString()) ?? 0;
     final short = double.tryParse(r['short_by'].toString()) ?? 0;
-    toast(
-      context,
-      short > 0
-          ? 'There was no ${p.name} in stock'
-          : '${spoiled ? "Threw away" : "Used"} ${p.name} · ${fmtQty(left)} left',
-    );
+    final events = List<String>.from(r['event_ids'] ?? const []);
+    if (short > 0 && events.isEmpty) {
+      toast(context, 'There was no ${p.name} in stock');
+      return;
+    }
+    final messenger = ScaffoldMessenger.of(context);
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text('${spoiled ? "Threw away" : "Used"} ${p.name} · ${fmtQty(left)} left'),
+          behavior: SnackBarBehavior.floating,
+          action: SnackBarAction(
+            label: 'Undo',
+            onPressed: () async {
+              try {
+                await s.api.undoStock(s.hid, events);
+                s.changed();
+                messenger.showSnackBar(
+                  SnackBar(content: Text('Put back ${p.name}'), behavior: SnackBarBehavior.floating),
+                );
+              } on ApiException catch (e) {
+                messenger.showSnackBar(SnackBar(content: Text(e.message), behavior: SnackBarBehavior.floating));
+              }
+            },
+          ),
+        ),
+      );
   } on ApiException catch (e) {
     if (context.mounted) toast(context, e.message, error: true);
   }

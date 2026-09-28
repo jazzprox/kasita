@@ -198,3 +198,31 @@ def test_failed_lookup_is_not_remembered_for_a_month(client, jazz, monkeypatch):
         db.commit()
     monkeypatch.setattr(bcs, "fetch_remote", lambda code: {"source": "openfoodfacts", "name": "Stabilo"})
     assert client.get(f"/api/households/{hid}/barcodes/4006381333931", headers=h).json()["name"] == "Stabilo"
+
+
+def test_brand_hint_from_company_prefix(client, jazz, monkeypatch):
+    from app.services import barcodes as bcs
+    h, hid = jazz
+    base = f"/api/households/{hid}"
+    monkeypatch.setattr(bcs, "fetch_remote", lambda code: None)  # nothing in any database
+    # one Roland product the household already has
+    client.post(f"{base}/products", json={"name": "Rice vinegar", "brand": "Roland",
+                                          "barcodes": ["041224705272"]}, headers=h)
+    r = client.get(f"{base}/barcodes/041224860506", headers=h).json()   # another Roland item
+    assert r["found"] is False and r["brand_hint"] == "Roland"
+    assert client.get(f"{base}/barcodes/5449000000996", headers=h).json()["brand_hint"] is None  # other maker
+    # two brands under one prefix: no guess rather than a wrong one
+    client.post(f"{base}/products", json={"name": "X", "brand": "Other brand", "barcodes": ["041224700017"]},
+                headers=h)
+    assert client.get(f"{base}/barcodes/041224860506", headers=h).json()["brand_hint"] is None
+
+
+def test_shopping_items_carry_a_category(client, jazz):
+    h, hid = jazz
+    base = f"/api/households/{hid}"
+    p = client.post(f"{base}/products", json={"name": "Head & Shoulders", "category": "Personal care"}, headers=h).json()
+    client.post(f"{base}/shopping", json={"product_id": p["id"]}, headers=h)
+    client.post(f"{base}/shopping", json={"name": "bananas"}, headers=h)
+    client.post(f"{base}/shopping", json={"name": "thing"}, headers=h)
+    cats = {i["name"]: i["category"] for i in client.get(f"{base}/shopping", headers=h).json()}
+    assert cats == {"Head & Shoulders": "Personal care", "bananas": "Produce", "thing": None}

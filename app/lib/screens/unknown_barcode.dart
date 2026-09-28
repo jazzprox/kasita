@@ -22,7 +22,11 @@ Future<Product?> productForUnknownBarcode(BuildContext context, BarcodeResult r,
         children: [
           ListTile(
             title: Text(r.name ?? 'Barcode ${r.barcode}', style: Theme.of(context).textTheme.titleMedium),
-            subtitle: Text(r.found ? 'New to your household' : 'Not in any product database'),
+            subtitle: Text(
+              r.found
+                  ? 'New to your household'
+                  : 'Not in any product database${r.brandHint == null ? '' : ' · probably ${r.brandHint}'}',
+            ),
           ),
           if (!r.found)
             ListTile(

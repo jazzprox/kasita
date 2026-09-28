@@ -83,7 +83,7 @@ class StockProduct {
 
 class ShoppingItem {
   final String id, name;
-  final String? productId, note;
+  final String? productId, note, category;
   final double quantity;
   final bool auto, done;
   ShoppingItem.fromJson(Map<String, dynamic> j)
@@ -91,16 +91,28 @@ class ShoppingItem {
       name = j['name'],
       productId = j['product_id'],
       note = j['note'],
+      category = j['category'],
       quantity = _num(j['quantity']),
       auto = j['auto'] ?? false,
       done = j['done'] ?? false;
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'product_id': productId,
+    'note': note,
+    'category': category,
+    'quantity': quantity,
+    'auto': auto,
+    'done': done,
+  };
+  ShoppingItem copyWith({bool? done}) => ShoppingItem.fromJson({...toJson(), 'done': done ?? this.done});
 }
 
 class BarcodeResult {
   final String barcode;
   final Product? product;
   final bool found;
-  final String? source, name, brand, quantityText, imageUrl, categories, category;
+  final String? source, name, brand, quantityText, imageUrl, categories, category, brandHint;
   BarcodeResult.fromJson(Map<String, dynamic> j)
     : barcode = j['barcode'],
       product = j['product'] == null ? null : Product.fromJson(j['product']),
@@ -111,7 +123,8 @@ class BarcodeResult {
       quantityText = j['quantity_text'],
       imageUrl = j['image_url'],
       categories = j['categories'],
-      category = j['category'];
+      category = j['category'],
+      brandHint = j['brand_hint'];
 }
 
 class PricePoint {

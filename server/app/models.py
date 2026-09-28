@@ -212,6 +212,14 @@ class ShoppingItem(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     done_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
+    product: Mapped["Product | None"] = relationship(lazy="joined")
+
+    @property
+    def category(self) -> str | None:
+        """For grouping the list: the product's category, else a guess from the typed name."""
+        from .services.categories import guess
+        return (self.product.category if self.product else None) or guess(self.name)
+
 
 class Receipt(Base):
     __tablename__ = "receipts"
