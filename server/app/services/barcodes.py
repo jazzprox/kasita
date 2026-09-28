@@ -50,18 +50,27 @@ def _parse(source: str, data: dict) -> dict | None:
     }
 
 
+RETRY_HOURS = 6  # how long a "not found" is trusted when some database could not be asked
+
+
+class Incomplete(Exception):
+    """No database had the product, but at least one could not be asked (timeout, error,
+    daily limit). Not a real "not found", so it must not be remembered for 30 days."""
+
+
 def _upcitemdb(client: httpx.Client, barcode: str) -> dict | None:
     """Last resort: UPCitemdb's keyless trial tier (100 lookups/day, strong on US non-food)."""
     try:
         r = client.get("https://api.upcitemdb.com/prod/trial/lookup", params={"upc": barcode})
     except httpx.HTTPError as e:
         log.warning("barcode %s: upcitemdb unreachable (%s)", barcode, e)
-        return None
+        raise Incomplete from e
     if r.status_code == 429:
         log.info("barcode %s: upcitemdb daily limit reached", barcode)
-        return None
+        raise Incomplete
     if r.status_code != 200:
-        return None
+        log.warning("barcode %s: upcitemdb answered %s", barcode, r.status_code)
+        raise Incomplete
     items = r.json().get("items") or []
     if not items or not items[0].get("title"):
         return None
@@ -79,22 +88,28 @@ def _upcitemdb(client: httpx.Client, barcode: str) -> dict | None:
 def fetch_remote(barcode: str, client: httpx.Client | None = None) -> dict | None:
     own = client is None
     client = client or httpx.Client(timeout=8, headers={"User-Agent": USER_AGENT}, follow_redirects=True)
+    failed = False
     try:
         for source, base in SOURCES:
             try:
                 r = client.get(f"{base}/api/v2/product/{barcode}.json", params={"fields": FIELDS})
             except httpx.HTTPError as e:
                 log.warning("barcode %s: %s unreachable (%s)", barcode, source, e)
+                failed = True
                 continue
             if r.status_code == 404:
                 continue
             if r.status_code != 200:
                 log.warning("barcode %s: %s answered %s", barcode, source, r.status_code)
+                failed = True
                 continue
             hit = _parse(source, r.json())
             if hit:
                 return hit
-        return _upcitemdb(client, barcode)
+        hit = _upcitemdb(client, barcode)
+        if hit is None and failed:
+            raise Incomplete
+        return hit
     finally:
         if own:
             client.close()
@@ -108,12 +123,21 @@ def lookup(db: Session, barcode: str, *, refresh: bool = False, fetch=None) -> B
         fetched = cached.fetched_at if cached.fetched_at.tzinfo else cached.fetched_at.replace(tzinfo=timezone.utc)
         if fetched > fresh_until:
             return cached
-    hit = (fetch or fetch_remote)(barcode)
+    now = datetime.now(timezone.utc)
+    try:
+        hit = (fetch or fetch_remote)(barcode)
+        checked_at = now
+    except Incomplete:
+        if cached and cached.found:
+            return cached  # an older real answer beats a failed refresh
+        hit = None
+        # remember this "not found" for RETRY_HOURS only: date it so it expires then
+        checked_at = now - timedelta(days=settings.barcode_cache_days) + timedelta(hours=RETRY_HOURS)
     row = cached or BarcodeCache(barcode=barcode)
     row.found = bool(hit)
     for k in ("source", "name", "brand", "quantity_text", "image_url", "categories"):
         setattr(row, k, (hit or {}).get(k))
-    row.fetched_at = datetime.now(timezone.utc)
+    row.fetched_at = checked_at
     db.merge(row)
     db.commit()
     return db.get(BarcodeCache, barcode)

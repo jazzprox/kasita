@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../api.dart';
 import '../main.dart';
@@ -22,6 +23,16 @@ Future<Product?> productForUnknownBarcode(BuildContext context, BarcodeResult r,
             title: Text(r.name ?? 'Barcode ${r.barcode}', style: Theme.of(context).textTheme.titleMedium),
             subtitle: Text(r.found ? 'New to your household' : 'Not in any product database'),
           ),
+          if (!r.found)
+            ListTile(
+              leading: const Icon(Icons.travel_explore),
+              title: const Text('Look it up on Google'),
+              subtitle: const Text('See what it is, then come back and name it once'),
+              onTap: () => launchUrl(
+                Uri.https('www.google.com', '/search', {'q': r.barcode}),
+                mode: LaunchMode.externalApplication,
+              ),
+            ),
           ListTile(
             leading: const Icon(Icons.link),
             title: const Text("It's one of my products"),

@@ -172,3 +172,29 @@ def test_pantry_pass_undo(client, jazz):
     # another household's events are invisible
     other = login(client, *make_user(email="undo-other@example.com"))
     assert client.post(f"{base}/stock/undo", json={"event_ids": [a1["event_id"]]}, headers=other).status_code == 404
+
+
+def test_failed_lookup_is_not_remembered_for_a_month(client, jazz, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+
+    from app.db import SessionLocal
+    from app.models import BarcodeCache
+    from app.services import barcodes as bcs
+    h, hid = jazz
+    calls = []
+
+    def down(code):
+        calls.append(code)
+        raise bcs.Incomplete
+
+    monkeypatch.setattr(bcs, "fetch_remote", down)
+    assert client.get(f"/api/households/{hid}/barcodes/4006381333931", headers=h).json()["found"] is False
+    with SessionLocal() as db:
+        row = db.get(BarcodeCache, "4006381333931")
+        age = datetime.now(timezone.utc) - row.fetched_at.replace(tzinfo=timezone.utc)
+        # dated so that it expires after ~6 hours instead of 30 days
+        assert timedelta(days=29) < age < timedelta(days=30)
+        row.fetched_at = datetime.now(timezone.utc) - timedelta(days=31)  # simulate the 6 hours passing
+        db.commit()
+    monkeypatch.setattr(bcs, "fetch_remote", lambda code: {"source": "openfoodfacts", "name": "Stabilo"})
+    assert client.get(f"/api/households/{hid}/barcodes/4006381333931", headers=h).json()["name"] == "Stabilo"
