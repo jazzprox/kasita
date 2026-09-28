@@ -33,7 +33,24 @@ jobs:
         run: |
           flutter pub get
           flutter analyze
-          flutter build web --release
+          # no service worker: it kept serving old builds (the generated
+          # flutter_service_worker.js then just unregisters existing ones)
+          flutter build web --release --pwa-strategy=none
+
+      # Flutter's file names are not content-hashed and Cloudflare forces a
+      # 4-hour browser cache on .js, so a deploy did not reach open browsers.
+      # Give the two entry scripts per-build names; index.html is never cached.
+      - name: Fingerprint entry scripts
+        working-directory: app/build/web
+        run: |
+          v="${GITHUB_SHA::8}"
+          test "$(grep -c '"main.dart.js"' flutter_bootstrap.js)" -ge 1
+          sed -i "s/\"main\.dart\.js\"/\"main.${v}.dart.js\"/g" flutter_bootstrap.js
+          mv main.dart.js "main.${v}.dart.js"
+          mv flutter_bootstrap.js "flutter_bootstrap.${v}.js"
+          sed -i "s/src=\"flutter_bootstrap\.js\"/src=\"flutter_bootstrap.${v}.js\"/" index.html
+          grep -q "flutter_bootstrap.${v}.js" index.html
+          ls
 
       - name: Publish to web-dist
         run: |
