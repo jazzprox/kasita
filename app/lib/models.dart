@@ -42,6 +42,8 @@ class Product {
   final bool shareable; // a barcode no database knows: can be given to Open Food Facts
   final int? openDays; // keeps this many days once opened
   final double? runsOutInDays; // forecast from usage; null = not enough history
+  final String? photoSource; // 'yours' | 'database' | null
+  final bool canRestorePhoto;
 
   Product.fromJson(Map<String, dynamic> j)
     : id = j['id'],
@@ -59,7 +61,9 @@ class Product {
       nextBestBefore = _date(j['next_best_before']),
       shareable = j['shareable'] ?? false,
       openDays = j['open_days'],
-      runsOutInDays = _numOrNull(j['runs_out_in_days']);
+      runsOutInDays = _numOrNull(j['runs_out_in_days']),
+      photoSource = j['photo_source'],
+      canRestorePhoto = j['can_restore_photo'] ?? false;
 }
 
 class StockEntry {
@@ -96,6 +100,7 @@ class ShoppingItem {
   final String? productId, note, category;
   final double quantity;
   final bool auto, done;
+  final DateTime? createdAt;
   ShoppingItem.fromJson(Map<String, dynamic> j)
     : id = j['id'],
       name = j['name'],
@@ -104,7 +109,8 @@ class ShoppingItem {
       category = j['category'],
       quantity = _num(j['quantity']),
       auto = j['auto'] ?? false,
-      done = j['done'] ?? false;
+      done = j['done'] ?? false,
+      createdAt = _date(j['created_at']);
   Map<String, dynamic> toJson() => {
     'id': id,
     'name': name,
@@ -114,6 +120,7 @@ class ShoppingItem {
     'quantity': quantity,
     'auto': auto,
     'done': done,
+    'created_at': createdAt?.toIso8601String(),
   };
   ShoppingItem copyWith({bool? done}) => ShoppingItem.fromJson({...toJson(), 'done': done ?? this.done});
 }

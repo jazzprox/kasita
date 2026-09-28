@@ -88,6 +88,7 @@ class InviteOut(BaseModel):
 
 class ApiKeyIn(BaseModel):
     name: str = Field(min_length=1, max_length=120)
+    read_only: bool = False  # can look, never change (any member may create one; full keys are owner-only)
 
 
 class ApiKeyOut(ORM):
@@ -96,6 +97,7 @@ class ApiKeyOut(ORM):
     prefix: str
     created_at: datetime
     last_used_at: datetime | None
+    read_only: bool = False
 
 
 class ApiKeyCreated(ApiKeyOut):
@@ -172,6 +174,8 @@ class ProductOut(ORM):
     shareable: bool = False  # has a barcode no database knows: can be given to Open Food Facts
     open_days: int | None = None
     runs_out_in_days: float | None = None  # from how fast it gets used; None = not enough history
+    photo_source: str | None = None  # "yours" (taken in Kasita) | "database" (came with the barcode) | None
+    can_restore_photo: bool = False  # a database photo was replaced and can be put back
 
 
 class BarcodeLookupOut(BaseModel):

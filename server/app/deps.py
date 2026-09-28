@@ -7,7 +7,7 @@ bound to one household and can only ever reach that household.
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -23,6 +23,7 @@ class Caller:
 
 
 def get_caller(
+    request: Request,
     authorization: str | None = Header(default=None),
     x_api_key: str | None = Header(default=None),
     db: Session = Depends(get_db),
@@ -32,6 +33,8 @@ def get_caller(
         if key:
             key.last_used_at = datetime.now(timezone.utc)
             db.commit()
+            if key.read_only and request.method not in ("GET", "HEAD"):
+                raise HTTPException(status.HTTP_403_FORBIDDEN, "This key can only read")
             user = db.get(User, key.user_id)
             if user:
                 return Caller(user=user, api_key_household=key.household_id)

@@ -21,6 +21,14 @@ from ..services.stock import get_product, in_stock
 router = APIRouter(prefix="/api/households/{household_id}", tags=["products"])
 
 
+def _is_local(url: str | None) -> bool:
+    return bool(url) and "/api/product-images/" in url
+
+
+def _photo_source(url: str | None) -> str | None:
+    return None if not url else ("yours" if _is_local(url) else "database")
+
+
 def _runs_out(db: Session, p: Product) -> float | None:
     from ..services.stock import forecast
     fc = forecast(db, p)
@@ -30,10 +38,12 @@ def _runs_out(db: Session, p: Product) -> float | None:
 def product_out(db: Session, p: Product) -> ProductOut:
     nxt = db.scalar(select(func.min(StockEntry.best_before)).where(
         StockEntry.product_id == p.id, StockEntry.quantity > 0))
-    fields = {k: getattr(p, k) for k in ProductOut.model_fields if k not in ("barcodes", "in_stock", "next_best_before", "shareable", "runs_out_in_days")}
+    fields = {k: getattr(p, k) for k in ProductOut.model_fields if k not in ("barcodes", "in_stock", "next_best_before", "shareable", "runs_out_in_days",
+                                                           "photo_source", "can_restore_photo")}
     return ProductOut(**fields, barcodes=[b.barcode for b in p.barcodes], in_stock=in_stock(db, p.id),
                       next_best_before=nxt, shareable=contrib.shareable_barcode(db, p) is not None,
-                      runs_out_in_days=_runs_out(db, p))
+                      runs_out_in_days=_runs_out(db, p), photo_source=_photo_source(p.image_url),
+                      can_restore_photo=bool(p.db_image_url and p.image_url != p.db_image_url))
 
 
 def _attach_barcodes(db: Session, household_id: str, product: Product, codes: list[str]) -> None:
@@ -65,6 +75,8 @@ def list_products(q: str | None = None, include_archived: bool = False,
 def create_product(body: ProductIn, a: HouseholdAccess = Depends(household_access), db: Session = Depends(get_db)):
     data = body.model_dump(exclude={"barcodes"})
     p = Product(household_id=a.household.id, **data)
+    if p.image_url and not _is_local(p.image_url):
+        p.db_image_url = p.image_url  # created from a barcode lookup: that picture is the database's
     db.add(p)
     db.flush()
     _attach_barcodes(db, a.household.id, p, body.barcodes)
@@ -98,6 +110,7 @@ def add_barcode(product_id: str, barcode: str = Query(...), a: HouseholdAccess =
     hit = bc.lookup(db, bc.normalise(barcode) or barcode)
     if hit.found:
         p.image_url = p.image_url or hit.image_url
+        p.db_image_url = p.db_image_url or hit.image_url
         p.brand = p.brand or hit.brand
         p.category = p.category or categories.guess(hit.name, hit.categories) \
             or categories.SOURCE_DEFAULT.get(hit.source or "")
@@ -219,6 +232,8 @@ async def set_photo(product_id: str, file: UploadFile = File(...), a: HouseholdA
     except ValueError as e:
         raise HTTPException(422, str(e)) from e
     old = p.image_url
+    if old and not _is_local(old) and not p.db_image_url:
+        p.db_image_url = old  # keep the database photo so it can be put back
     p.image_url = f"{settings.public_url.rstrip('/')}/api/product-images/{a.household.id}/{name}"
     db.commit()
     _drop_local_photo(old)
@@ -232,3 +247,39 @@ def remove_photo(product_id: str, a: HouseholdAccess = Depends(household_access)
     db.commit()
     _drop_local_photo(old)
     return product_out(db, p)
+
+
+
+@router.post("/products/{product_id}/photo/restore", response_model=ProductOut)
+def restore_photo(product_id: str, a: HouseholdAccess = Depends(household_access), db: Session = Depends(get_db)):
+    """Put the product database's picture back (after it was replaced or removed)."""
+    p = get_product(db, a.household.id, product_id)
+    if not p.db_image_url:
+        raise HTTPException(409, "There is no database photo for this product")
+    old, p.image_url = p.image_url, p.db_image_url
+    db.commit()
+    if old != p.image_url:
+        _drop_local_photo(old)
+    return product_out(db, p)
+
+
+@router.get("/widget")
+def widget(a: HouseholdAccess = Depends(household_access), db: Session = Depends(get_db)):
+    """What the Android home-screen widget shows (fetched every 30 minutes with a read-only key)."""
+    from datetime import date as _date
+
+    from ..models import ShoppingItem
+    open_items = db.scalars(select(ShoppingItem).where(ShoppingItem.household_id == a.household.id,
+                                                       ShoppingItem.done.is_(False))
+                            .order_by(ShoppingItem.created_at)).all()
+    soon_rows = db.execute(
+        select(Product.name, func.min(StockEntry.best_before))
+        .join(StockEntry, StockEntry.product_id == Product.id)
+        .where(Product.household_id == a.household.id, StockEntry.quantity > 0, StockEntry.best_before.is_not(None),
+               StockEntry.frozen_at.is_(None))
+        .group_by(Product.id, Product.name)).all()
+    today = _date.today()
+    soon = [n for n, bb in sorted(soon_rows, key=lambda r: r[1]) if (bb - today).days <= 2][:4]
+    return {"shopping_title": f"Shopping list ({len(open_items)})",
+            "shopping": "\n".join(f"• {i.name}" for i in open_items[:8]) or "Nothing to buy",
+            "soon": f"Use soon: {', '.join(soon)}" if soon else ""}

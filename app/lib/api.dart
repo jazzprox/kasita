@@ -264,6 +264,10 @@ class Api {
       Product.fromJson(await upload('${_h(hid)}/products/$pid/photo', [(photo, 'product.jpg')]));
   Future<Product> removeProductPhoto(String hid, String pid) async =>
       Product.fromJson(await delete('${_h(hid)}/products/$pid/photo'));
+  Future<Product> restoreProductPhoto(String hid, String pid) async =>
+      Product.fromJson(await post('${_h(hid)}/products/$pid/photo/restore'));
+  Future<Map<String, dynamic>> createApiKey(String hid, String name, {bool readOnly = false}) async =>
+      Map<String, dynamic>.from(await post('${_h(hid)}/api-keys', {'name': name, 'read_only': readOnly}));
   Future<void> undoStock(String hid, List<String> eventIds) => post('${_h(hid)}/stock/undo', {'event_ids': eventIds});
   Future<Map<String, dynamic>> consume(String hid, String pid, double qty, {bool spoiled = false}) async =>
       Map<String, dynamic>.from(

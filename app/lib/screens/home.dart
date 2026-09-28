@@ -10,6 +10,7 @@ import 'pantry.dart';
 import 'pantry_pass.dart';
 import 'receipts.dart';
 import '../api.dart';
+import '../home_widget_sync.dart';
 import '../main.dart';
 import '../spoken_list.dart';
 import '../widgets.dart';
@@ -83,6 +84,8 @@ class _HomeScreenState extends State<HomeScreen> {
       ReceiveSharingIntent.instance.reset();
     });
     _shareSub = ReceiveSharingIntent.instance.getMediaStream().listen(_shared);
+    final st = Kasita.read(context);
+    ensureWidgetKey(st.api, st.hid);
     actions.setShortcutItems(const [
       ShortcutItem(type: 'pass', localizedTitle: 'Pantry pass'),
       ShortcutItem(type: 'receipt', localizedTitle: 'Scan receipt'),

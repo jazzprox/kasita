@@ -99,13 +99,16 @@ def list_keys(a: HouseholdAccess = Depends(household_owner), db: Session = Depen
 
 
 @router.post("/{household_id}/api-keys", response_model=ApiKeyCreated, status_code=201)
-def create_key(body: ApiKeyIn, a: HouseholdAccess = Depends(household_owner), db: Session = Depends(get_db)):
+def create_key(body: ApiKeyIn, a: HouseholdAccess = Depends(household_access), db: Session = Depends(get_db)):
+    if not body.read_only and a.role != "owner":
+        raise HTTPException(403, "Only the household owner can create a full API key")
     key = "ksk_" + new_token(30)
-    row = ApiKey(key_hash=token_hash(key), prefix=key[:10], name=body.name, household_id=a.household.id, user_id=a.user.id)
+    row = ApiKey(key_hash=token_hash(key), prefix=key[:10], name=body.name, household_id=a.household.id, user_id=a.user.id,
+                 read_only=body.read_only)
     db.add(row)
     db.commit()
     return ApiKeyCreated(id=row.id, name=row.name, prefix=row.prefix, created_at=row.created_at,
-                         last_used_at=None, key=key)
+                         last_used_at=None, key=key, read_only=row.read_only)
 
 
 @router.delete("/{household_id}/api-keys/{key_id}", status_code=204)

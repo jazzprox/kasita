@@ -107,6 +107,7 @@ class ApiKey(Base):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    read_only: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())  # e.g. the widget
 
 
 class BarcodeCache(Base):
@@ -151,6 +152,8 @@ class Product(Base):
     category: Mapped[str | None] = mapped_column(String(80))
     unit: Mapped[str] = mapped_column(String(24), default="pcs")  # what one unit of stock means
     image_url: Mapped[str | None] = mapped_column(Text)
+    # the picture a product database gave; kept when you replace it, so it can be restored
+    db_image_url: Mapped[str | None] = mapped_column(Text)
     default_location_id: Mapped[str | None] = mapped_column(ForeignKey("locations.id", ondelete="SET NULL"))
     min_stock: Mapped[Decimal] = mapped_column(Qty, default=0)  # below this it goes on the shopping list
     shelf_life_days: Mapped[int | None]  # default best-before offset when none is entered

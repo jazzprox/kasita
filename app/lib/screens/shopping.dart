@@ -6,6 +6,7 @@ import 'package:speech_to_text/speech_to_text.dart';
 
 import '../main.dart';
 import '../offline_shopping.dart';
+import '../prefs.dart';
 import '../home_widget_sync.dart';
 import '../spoken_list.dart';
 import '../models.dart';
@@ -23,6 +24,39 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
   int _seen = -1;
   bool _offline = false; // showing the list saved on the phone
   bool _byStore = false; // group by the store where each item was cheapest last time
+  String _sort = 'aisle'; // aisle | store | name | newest | oldest
+
+  static const _sorts = [
+    ('aisle', 'By aisle'),
+    ('store', 'Cheapest store'),
+    ('name', 'Name A–Z'),
+    ('newest', 'Newest first'),
+    ('oldest', 'Oldest first'),
+  ];
+
+  void _setSort(String v) {
+    setState(() {
+      _sort = v;
+      _byStore = v == 'store';
+    });
+    savePref('shopping.sort', v);
+    if (_byStore) _loadStores();
+  }
+
+  List<ShoppingItem> _flat(List<ShoppingItem> open) {
+    final l = [...open];
+    final t0 = DateTime(2000);
+    switch (_sort) {
+      case 'newest':
+        l.sort((a, b) => (b.createdAt ?? t0).compareTo(a.createdAt ?? t0));
+      case 'oldest':
+        l.sort((a, b) => (a.createdAt ?? t0).compareTo(b.createdAt ?? t0));
+      default:
+        l.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    }
+    return l;
+  }
+
   final _speech = SpeechToText();
   bool _listening = false;
 
@@ -69,6 +103,9 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
   @override
   void initState() {
     super.initState();
+    loadPref('shopping.sort', 'aisle').then((v) {
+      if (mounted && v != _sort) _setSort(v);
+    });
     // while offline, try again every 20 s so queued changes go out as soon as there is signal
     _retry = Timer.periodic(const Duration(seconds: 20), (_) {
       if (_offline && mounted) _load();
@@ -309,6 +346,14 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
       appBar: AppBar(
         title: const Text('Shopping list'),
         actions: [
+          PopupMenuButton<String>(
+            tooltip: 'Sort',
+            icon: const Icon(Icons.sort),
+            onSelected: _setSort,
+            itemBuilder: (_) => [
+              for (final (v, label) in _sorts) CheckedPopupMenuItem(value: v, checked: v == _sort, child: Text(label)),
+            ],
+          ),
           if (open.isNotEmpty)
             IconButton(
               tooltip: 'Share the list (WhatsApp, messages...)',
@@ -385,31 +430,10 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
                     onRefresh: _load,
                     child: ListView(
                       children: [
-                        if (open.length > 1 && !_offline)
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-                            child: SegmentedButton<bool>(
-                              segments: const [
-                                ButtonSegment(
-                                  value: false,
-                                  icon: Icon(Icons.category_outlined),
-                                  label: Text('By aisle'),
-                                ),
-                                ButtonSegment(
-                                  value: true,
-                                  icon: Icon(Icons.savings_outlined),
-                                  label: Text('Cheapest store'),
-                                ),
-                              ],
-                              selected: {_byStore},
-                              onSelectionChanged: (v) {
-                                setState(() => _byStore = v.first);
-                                if (_byStore) _loadStores();
-                              },
-                            ),
-                          ),
                         if (_byStore && !_offline)
                           ..._storeSections(open)
+                        else if (_sort != 'aisle' && _sort != 'store')
+                          for (final i in _flat(open)) _tile(i)
                         else
                           for (final (cat, items) in _groups(open)) ...[
                             Padding(

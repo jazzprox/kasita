@@ -122,9 +122,28 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (p.photoSource == 'database')
+              const ListTile(
+                leading: Icon(Icons.cloud_outlined),
+                title: Text('This picture came with the barcode'),
+                subtitle: Text(
+                  'It is the product database\'s photo. Replacing it only changes it in Kasita, '
+                  'and you can put it back later.',
+                ),
+              ),
+            if (p.canRestorePhoto)
+              ListTile(
+                leading: const Icon(Icons.restore),
+                title: const Text('Restore the database photo'),
+                onTap: () => Navigator.pop(c, 'restore'),
+              ),
             ListTile(
               leading: const Icon(Icons.photo_camera_outlined),
-              title: Text(p.imageUrl == null ? 'Take a photo' : 'Take a new photo'),
+              title: Text(
+                p.imageUrl == null
+                    ? 'Take a photo'
+                    : (p.photoSource == 'database' ? 'Replace with my own photo' : 'Take a new photo'),
+              ),
               subtitle: const Text('Pack on a table, front label filling the frame'),
               onTap: () => Navigator.pop(c, 'camera'),
             ),
@@ -145,7 +164,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     );
     if (choice == null || !mounted) return;
     try {
-      if (choice == 'remove') {
+      if (choice == 'restore') {
+        await s.api.restoreProductPhoto(s.hid, p.id);
+      } else if (choice == 'remove') {
         await s.api.removeProductPhoto(s.hid, p.id);
       } else {
         final shot = await ImagePicker().pickImage(
@@ -158,7 +179,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       }
       s.changed();
       _load();
-      if (mounted) toast(context, choice == 'remove' ? 'Photo removed' : 'Photo updated');
+      if (mounted) {
+        toast(context, {'remove': 'Photo removed', 'restore': 'Database photo is back'}[choice] ?? 'Photo updated');
+      }
     } on ApiException catch (e) {
       if (mounted) toast(context, e.message, error: true);
     }
@@ -251,7 +274,11 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       child: CircleAvatar(
                         radius: 12,
                         backgroundColor: t.colorScheme.primaryContainer,
-                        child: Icon(Icons.photo_camera, size: 14, color: t.colorScheme.onPrimaryContainer),
+                        child: Icon(
+                          p.photoSource == 'database' ? Icons.cloud_outlined : Icons.photo_camera,
+                          size: 14,
+                          color: t.colorScheme.onPrimaryContainer,
+                        ),
                       ),
                     ),
                   ],
@@ -263,6 +290,11 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     if (p.brand != null) Text(p.brand!, style: TextStyle(color: t.colorScheme.onSurfaceVariant)),
+                    if (p.photoSource != null)
+                      Text(
+                        p.photoSource == 'database' ? 'Photo: from the product database' : 'Photo: yours',
+                        style: t.textTheme.bodySmall?.copyWith(color: t.colorScheme.onSurfaceVariant),
+                      ),
                     Text('${fmtQty(p.inStock)} ${p.unit} at home', style: t.textTheme.titleLarge),
                     if (p.minStock > 0) Text('Keep at least ${fmtQty(p.minStock)}'),
                   ],

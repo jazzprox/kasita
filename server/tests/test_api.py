@@ -252,3 +252,22 @@ def test_default_invite_still_joins(client, jazz):
                                                       "name": "Fam", "password": "a-long-password"})
     fam = {"Authorization": f"Bearer {r.json()['access_token']}"}
     assert [x["id"] for x in client.get("/api/households", headers=fam).json()] == [hid]
+
+
+def test_read_only_widget_key(client, jazz):
+    h, hid = jazz
+    base = f"/api/households/{hid}"
+    client.post(f"{base}/shopping", json={"name": "milk"}, headers=h)
+    key = client.post(f"{base}/api-keys", json={"name": "Home-screen widget", "read_only": True}, headers=h).json()
+    assert key["read_only"] is True
+    k = {"X-Api-Key": key["key"]}
+    w = client.get(f"{base}/widget", headers=k).json()
+    assert w == {"shopping_title": "Shopping list (1)", "shopping": "• milk", "soon": ""}
+    assert client.post(f"{base}/shopping", json={"name": "beer"}, headers=k).status_code == 403   # can only read
+    # a member (not owner) may create a read-only key, not a full one
+    inv = client.post(f"{base}/invites", headers=h).json()
+    r = client.post("/api/auth/accept-invite", json={"token": inv["url"].rsplit("/", 1)[1], "email": "kid@example.com",
+                                                      "name": "Kid", "password": "a-long-password"}).json()
+    kid = {"Authorization": f"Bearer {r['access_token']}"}
+    assert client.post(f"{base}/api-keys", json={"name": "w", "read_only": True}, headers=kid).status_code == 201
+    assert client.post(f"{base}/api-keys", json={"name": "full"}, headers=kid).status_code == 403

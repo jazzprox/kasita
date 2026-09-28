@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import 'api.dart';
+import 'home_widget_sync.dart';
 import 'models.dart';
 
 /// App-wide state: who's signed in, which household is active, and the
@@ -49,6 +50,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> selectHousehold(Household h) async {
     household = h;
+    ensureWidgetKey(api, h.id);
     locations = await api.locations(h.id);
     stores = await api.stores(h.id);
     revision++;
@@ -66,6 +68,7 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> signOut() async {
+    await clearWidget();
     await api.logout();
     households = [];
     household = null;

@@ -67,3 +67,22 @@ def test_retake_and_remove_product_photo(client, jazz, tmp_path, monkeypatch):
     # an Open Food Facts picture is only a link: removing it deletes nothing
     client.patch(f"{base}/products/{pid}", json={"image_url": "https://images.openfoodfacts.org/x.jpg"}, headers=h)
     assert client.delete(f"{base}/products/{pid}/photo", headers=h).json()["image_url"] is None
+
+
+def test_photo_source_and_restoring_the_database_photo(client, jazz, tmp_path, monkeypatch):
+    from app.config import settings
+    monkeypatch.setattr(settings, "upload_dir", str(tmp_path))
+    h, hid = jazz
+    base = f"/api/households/{hid}"
+    db_pic = "https://images.openfoodfacts.org/images/products/544/900/000/0996/front_en.jpg"
+    p = client.post(f"{base}/products", json={"name": "Coca-Cola", "image_url": db_pic}, headers=h).json()
+    assert p["photo_source"] == "database" and p["can_restore_photo"] is False
+    mine = client.post(f"{base}/products/{p['id']}/photo", headers=h, files={"file": ("a.jpg", photo(), "image/jpeg")}).json()
+    assert mine["photo_source"] == "yours" and mine["can_restore_photo"] is True
+    back = client.post(f"{base}/products/{p['id']}/photo/restore", headers=h).json()
+    assert back["image_url"] == db_pic and back["photo_source"] == "database" and back["can_restore_photo"] is False
+    assert client.get("/" + mine["image_url"].split("/", 3)[3]).status_code == 404   # my photo cleaned up
+    gone = client.delete(f"{base}/products/{p['id']}/photo", headers=h).json()
+    assert gone["photo_source"] is None and gone["can_restore_photo"] is True       # removed, still restorable
+    plain = client.post(f"{base}/products", json={"name": "Garlic"}, headers=h).json()
+    assert client.post(f"{base}/products/{plain['id']}/photo/restore", headers=h).status_code == 409
