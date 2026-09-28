@@ -87,14 +87,17 @@ def weekly_message(s: dict) -> str | None:
     return "\n".join(lines)
 
 
-def send(title: str, message: str, tags: str = "shopping_cart", priority: str = "default") -> None:
-    if not (settings.ntfy_url and settings.ntfy_topic):
-        raise RuntimeError("ntfy is not configured (KASITA_NTFY_URL / KASITA_NTFY_TOPIC)")
+def send(title: str, message: str, tags: str = "shopping_cart", priority: str = "default",
+         topic: str | None = None) -> None:
+    """Post to ntfy. `topic` is the household's own; digests never share one topic across households."""
+    topic = topic or settings.ntfy_topic
+    if not (settings.ntfy_url and topic):
+        raise RuntimeError("ntfy is not configured (KASITA_NTFY_URL / a topic)")
     headers = {"Title": title if title.isascii() else "Kasita",  # HTTP headers are latin-1 only
                "Tags": tags, "Priority": priority, "Click": settings.public_url}
     if settings.ntfy_token:
         headers["Authorization"] = f"Bearer {settings.ntfy_token}"
-    r = httpx.post(f"{settings.ntfy_url.rstrip('/')}/{settings.ntfy_topic}", content=message.encode("utf-8"),
+    r = httpx.post(f"{settings.ntfy_url.rstrip('/')}/{topic}", content=message.encode("utf-8"),
                    headers=headers, timeout=20)
     r.raise_for_status()
 

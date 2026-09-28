@@ -50,6 +50,8 @@ class Household(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     name: Mapped[str] = mapped_column(String(120))
     currency: Mapped[str] = mapped_column(String(3), default="XCG")
+    # ntfy topic for this household's digests (expiry, weekly, freezer). None = no digests.
+    ntfy_topic: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     members: Mapped[list["Membership"]] = relationship(back_populates="household", cascade="all, delete-orphan")

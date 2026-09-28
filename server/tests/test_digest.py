@@ -45,3 +45,22 @@ def test_nothing_to_say_sends_nothing(client, jazz):
     with SessionLocal() as db:
         assert dg.expiry_message(dg.expiring(db, hid)) is None
         assert dg.weekly_message(dg.spending(db, hid)) is None
+
+
+def test_digests_only_go_to_each_households_own_topic(client, jazz, monkeypatch):
+    from app import cli
+    from app.models import Household
+    from app.services import digest
+    h, hid = jazz
+    other = client.post("/api/households", json={"name": "Mom"}, headers=h).json()["id"]
+    today = date.today().isoformat()
+    for house in (hid, other):
+        pid = client.post(f"/api/households/{house}/products", json={"name": "Milk"}, headers=h).json()["id"]
+        client.post(f"/api/households/{house}/stock/purchase", json={"product_id": pid, "best_before": today}, headers=h)
+    with SessionLocal() as db:
+        db.get(Household, hid).ntfy_topic = "kasita"
+        db.commit()
+    sent = []
+    monkeypatch.setattr(digest, "send", lambda title, msg, tags, topic=None: sent.append((topic, title)))
+    cli.digest("expiry", dry_run=False)
+    assert sent == [("kasita", "Jazz: use these soon")]   # Mom's household has no topic: nothing sent anywhere

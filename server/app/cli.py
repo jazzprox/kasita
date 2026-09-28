@@ -45,6 +45,9 @@ def digest(kind: str, dry_run: bool) -> None:
     from .services import digest as dg
     with SessionLocal() as db:
         for h in db.scalars(select(Household)):
+            if not h.ntfy_topic:
+                print(f"{h.name}: no notification topic set, skipped")
+                continue
             if kind == "expiry":
                 msg = dg.expiry_message(dg.expiring(db, h.id))
                 title, tags = f"{h.name}: use these soon", "hourglass_flowing_sand"
@@ -60,7 +63,7 @@ def digest(kind: str, dry_run: bool) -> None:
                 continue
             print(f"{h.name}:\n{msg}")
             if not dry_run:
-                dg.send(title, msg, tags)
+                dg.send(title, msg, tags, topic=h.ntfy_topic)
 
 
 def main() -> None:
