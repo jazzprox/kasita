@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     refresh_token_days: int = 90
     # contact address sent to Open Food Facts in the User-Agent, as their API asks
     off_contact: str = "kasita-selfhosted"
+    # Kroger product API (free developer account, client-credentials grant): US groceries.
+    # Empty = source skipped.
+    kroger_client_id: str = ""
+    kroger_client_secret: str = ""
     # how long a barcode lookup result (found or not found) is trusted before asking again
     barcode_cache_days: int = 30
     upload_dir: str = "./uploads"

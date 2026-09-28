@@ -58,6 +58,63 @@ class Incomplete(Exception):
     daily limit). Not a real "not found", so it must not be remembered for 30 days."""
 
 
+_kroger_token: tuple[str, float] | None = None  # (token, expires at)
+
+
+def kroger_id(barcode: str) -> str | None:
+    """Kroger keys products by the barcode WITHOUT its check digit, left-padded to 13:
+    UPC-A 049000028904 -> 0004900002890. Only 12/13-digit codes."""
+    if len(barcode) not in (12, 13):
+        return None
+    return barcode[:-1].rjust(13, "0")
+
+
+def _kroger(client: httpx.Client, barcode: str) -> dict | None:
+    """Kroger's product catalogue: strong on US groceries (the imports on Curaçao shelves)."""
+    global _kroger_token
+    pid = kroger_id(barcode)
+    if not pid or not settings.kroger_client_id:
+        return None
+    import time
+    try:
+        if not _kroger_token or _kroger_token[1] < time.time() + 60:
+            t = client.post("https://api.kroger.com/v1/connect/oauth2/token",
+                            auth=(settings.kroger_client_id, settings.kroger_client_secret),
+                            data={"grant_type": "client_credentials", "scope": "product.compact"})
+            if t.status_code != 200:
+                log.warning("barcode %s: kroger token refused (%s)", barcode, t.status_code)
+                raise Incomplete
+            b = t.json()
+            _kroger_token = (b["access_token"], time.time() + int(b.get("expires_in", 1800)))
+        r = client.get(f"https://api.kroger.com/v1/products/{pid}",
+                       headers={"Authorization": f"Bearer {_kroger_token[0]}", "Accept": "application/json"})
+    except httpx.HTTPError as e:
+        log.warning("barcode %s: kroger unreachable (%s)", barcode, e)
+        raise Incomplete from e
+    if r.status_code in (400, 404):
+        return None
+    if r.status_code != 200:
+        log.warning("barcode %s: kroger answered %s", barcode, r.status_code)
+        raise Incomplete
+    p = (r.json() or {}).get("data") or {}
+    if not p.get("description"):
+        return None
+    image = None
+    for img in p.get("images") or []:
+        sizes = {s.get("size"): s.get("url") for s in img.get("sizes") or []}
+        url = sizes.get("large") or sizes.get("medium") or next(iter(sizes.values()), None)
+        if url and (img.get("perspective") == "front" or image is None):
+            image = url
+    return {
+        "source": "kroger",
+        "name": p["description"][:255],
+        "brand": p.get("brand") or None,
+        "quantity_text": ((p.get("items") or [{}])[0].get("size") or None),
+        "image_url": image,
+        "categories": ", ".join(p.get("categories") or []) or None,
+    }
+
+
 def _upcitemdb(client: httpx.Client, barcode: str) -> dict | None:
     """Last resort: UPCitemdb's keyless trial tier (100 lookups/day, strong on US non-food)."""
     try:
@@ -106,10 +163,17 @@ def fetch_remote(barcode: str, client: httpx.Client | None = None) -> dict | Non
             hit = _parse(source, r.json())
             if hit:
                 return hit
-        hit = _upcitemdb(client, barcode)
-        if hit is None and failed:
+        for extra in (_kroger, _upcitemdb):  # Kroger first: it also spares UPCitemdb's 100/day
+            try:
+                hit = extra(client, barcode)
+            except Incomplete:
+                failed = True
+                continue
+            if hit:
+                return hit
+        if failed:
             raise Incomplete
-        return hit
+        return None
     finally:
         if own:
             client.close()
