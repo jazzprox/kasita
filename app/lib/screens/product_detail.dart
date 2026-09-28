@@ -61,6 +61,19 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     }
   }
 
+  /// Newest price at each store (prices come newest first), cheapest marked.
+  List<(String, PricePoint, bool)> _perStore() {
+    final latest = <String, PricePoint>{};
+    for (final pr in _prices) {
+      latest.putIfAbsent(pr.storeName ?? 'Unknown store', () => pr);
+    }
+    if (latest.isEmpty) return [];
+    final low = latest.values.map((p) => p.unitPrice).reduce((a, b) => a < b ? a : b);
+    final rows = [for (final e in latest.entries) (e.key, e.value, e.value.unitPrice == low)];
+    rows.sort((a, b) => a.$2.unitPrice.compareTo(b.$2.unitPrice));
+    return rows;
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = Kasita.of(context);
@@ -165,6 +178,27 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 style: TextStyle(color: t.colorScheme.primary, fontWeight: FontWeight.w600),
               ),
             ),
+          if (_perStore().length > 1) ...[
+            const SizedBox(height: 4),
+            Text('Latest price per store', style: t.textTheme.labelLarge),
+            for (final (store, pr, cheapest) in _perStore())
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                leading: Icon(
+                  cheapest ? Icons.star : Icons.storefront_outlined,
+                  color: cheapest ? t.colorScheme.primary : null,
+                ),
+                title: Text(store),
+                subtitle: Text(dateFmtYear.format(pr.at.toLocal())),
+                trailing: Text(
+                  '${s.household!.currency} ${pr.unitPrice.toStringAsFixed(2)}',
+                  style: cheapest ? TextStyle(color: t.colorScheme.primary, fontWeight: FontWeight.w600) : null,
+                ),
+              ),
+            const Divider(),
+            Text('Every price paid', style: t.textTheme.labelLarge),
+          ],
           for (final pr in _prices)
             ListTile(
               contentPadding: EdgeInsets.zero,

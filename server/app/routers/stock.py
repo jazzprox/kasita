@@ -96,3 +96,11 @@ def events(limit: int = 100, product_id: str | None = None, a: HouseholdAccess =
     if product_id:
         stmt = stmt.where(StockEvent.product_id == product_id)
     return db.scalars(stmt.order_by(StockEvent.at.desc()).limit(min(limit, 500))).all()
+
+
+
+@router.get("/spending")
+def spending(days: int = 30, a: HouseholdAccess = Depends(household_access), db: Session = Depends(get_db)):
+    """What priced purchases (receipts, or prices typed when buying) cost, per category and store."""
+    from ..services.digest import spending as calc
+    return calc(db, a.household.id, days=max(1, min(days, 366)))
