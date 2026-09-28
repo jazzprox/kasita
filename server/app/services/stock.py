@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ..models import Product, ShoppingItem, StockEntry, StockEvent
+from ..models import Location, Product, ShoppingItem, StockEntry, StockEvent
 
 
 def get_product(db: Session, household_id: str, product_id: str) -> Product:
@@ -32,6 +32,9 @@ def purchase(db: Session, household_id: str, user_id: str | None, product: Produ
     entry = StockEntry(household_id=household_id, product_id=product.id, quantity=quantity, best_before=best_before,
                        location_id=location_id or product.default_location_id, unit_price=unit_price,
                        store_id=store_id, purchased_at=bought, receipt_line_id=receipt_line_id)
+    loc = db.get(Location, entry.location_id) if entry.location_id else None
+    if loc is not None and loc.is_freezer:
+        entry.frozen_at = bought
     db.add(entry)
     db.flush()
     db.add(StockEvent(household_id=household_id, product_id=product.id, entry_id=entry.id, kind="purchase",
@@ -79,23 +82,55 @@ def open_one(db: Session, household_id: str, user_id: str | None, product: Produ
         return None
     e = entries[0]
     e.opened_at = date.today()
+    if product.open_days:
+        # once open it keeps open_days: that becomes its date if sooner than the printed one
+        by = e.opened_at + timedelta(days=product.open_days)
+        e.best_before = min(e.best_before, by) if e.best_before else by
     db.add(StockEvent(household_id=household_id, product_id=product.id, entry_id=e.id, kind="open",
                       quantity=Decimal(0), user_id=user_id))
     return e
 
 
+def forecast(db: Session, product: Product, now: datetime | None = None) -> tuple[float, float] | None:
+    """(units used per day, days until it runs out) from the last 120 days of use, or None
+    when there is too little history to say (fewer than 2 uses, or under 14 days of data)."""
+    now = now or datetime.now(timezone.utc)
+    since = now - timedelta(days=120)
+    uses = db.execute(select(StockEvent.quantity, StockEvent.at).where(
+        StockEvent.product_id == product.id, StockEvent.kind.in_(("consume", "spoil")), StockEvent.at >= since)).all()
+    if len(uses) < 2:
+        return None
+    first = db.scalar(select(func.min(StockEvent.at)).where(StockEvent.product_id == product.id,
+                                                             StockEvent.at >= since))
+    first = first if first.tzinfo else first.replace(tzinfo=timezone.utc)
+    span = (now - first).total_seconds() / 86400
+    if span < 14:
+        return None
+    rate = float(sum(q for q, _ in uses)) / span
+    if rate <= 0:
+        return None
+    return rate, float(in_stock(db, product.id)) / rate
+
+
+RUN_OUT_DAYS = 4  # put it on the list when the forecast says it runs out within this many days
+
+
 def refill_if_low(db: Session, household_id: str, product: Product) -> ShoppingItem | None:
-    """Put a product on the shopping list when stock drops below its minimum (once)."""
-    if not product.min_stock or product.archived:
+    """Put a product on the shopping list when stock drops below its minimum, or when its usage
+    says it will run out within RUN_OUT_DAYS (once; an open item is not duplicated)."""
+    if product.archived:
         return None
     have = in_stock(db, product.id)
-    if have >= product.min_stock:
+    low = bool(product.min_stock) and have < product.min_stock
+    fc = None if low else forecast(db, product)
+    if not low and not (fc and fc[1] <= RUN_OUT_DAYS):
         return None
     open_item = db.scalar(select(ShoppingItem).where(ShoppingItem.product_id == product.id, ShoppingItem.done.is_(False)))
     if open_item:
         return open_item
-    item = ShoppingItem(household_id=household_id, product_id=product.id, name=product.name,
-                        quantity=max(product.min_stock - have, Decimal(1)), auto=True)
+    qty = max(product.min_stock - have, Decimal(1)) if low else Decimal(1)
+    item = ShoppingItem(household_id=household_id, product_id=product.id, name=product.name, quantity=qty,
+                        auto=True, note=None if low else "running out soon")
     db.add(item)
     return item
 

@@ -51,6 +51,65 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     }
   }
 
+  /// Tap a batch: set its date (photo or calendar) or move it (into the freezer starts the frozen clock).
+  Future<void> _editEntry(StockEntry e) async {
+    final s = Kasita.read(context);
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (c) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: const Text('Read the date from a photo'),
+              onTap: () => Navigator.pop(c, 'photo'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.event),
+              title: const Text('Pick the date'),
+              onTap: () => Navigator.pop(c, 'pick'),
+            ),
+            const Divider(),
+            for (final l in s.locations)
+              ListTile(
+                leading: Icon(l.isFreezer ? Icons.ac_unit : Icons.kitchen_outlined),
+                title: Text('Move to ${l.name}'),
+                trailing: l.id == e.locationId ? const Icon(Icons.check) : null,
+                onTap: () => Navigator.pop(c, 'loc:${l.id}'),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (choice == null || !mounted) return;
+    Map<String, dynamic>? body;
+    if (choice == 'photo') {
+      final d = await dateFromPhoto(context);
+      if (d != null) body = {'best_before': d.toIso8601String().substring(0, 10)};
+    } else if (choice == 'pick') {
+      final now = DateTime.now();
+      final d = await showDatePicker(
+        context: context,
+        initialDate: e.bestBefore ?? now.add(const Duration(days: 7)),
+        firstDate: now.subtract(const Duration(days: 365)),
+        lastDate: now.add(const Duration(days: 365 * 5)),
+      );
+      if (d != null) body = {'best_before': d.toIso8601String().substring(0, 10)};
+    } else if (choice.startsWith('loc:')) {
+      body = {'location_id': choice.substring(4)};
+    }
+    if (body == null || !mounted) return;
+    try {
+      await s.api.patchEntry(s.hid, e.id, body);
+      s.changed();
+      _load();
+    } on ApiException catch (err) {
+      if (mounted) toast(context, err.message, error: true);
+    }
+  }
+
   Future<void> _addBarcode() async {
     final s = Kasita.read(context);
     final code = await Navigator.of(context).push<String>(
@@ -175,6 +234,16 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           ),
           const SizedBox(height: 24),
           Text('At home', style: t.textTheme.titleMedium),
+          if (p.runsOutInDays != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                'At your usual pace this lasts about ${p.runsOutInDays!.round()} more days',
+                style: TextStyle(
+                  color: p.runsOutInDays! <= 7 ? Colors.orange.shade800 : t.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
           if (_entries.isEmpty)
             const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Text('None right now.')),
           for (final e in _entries)
@@ -189,7 +258,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 'Bought ${dateFmt.format(e.purchasedAt)}'
                 '${e.unitPrice == null ? "" : " · ${s.household!.currency} ${e.unitPrice!.toStringAsFixed(2)}"}',
               ),
-              trailing: ExpiryChip(e.bestBefore),
+              trailing: e.frozenAt != null ? FrozenChip(e.frozenAt!) : ExpiryChip(e.bestBefore),
+              onTap: () => _editEntry(e),
             ),
           const SizedBox(height: 24),
           Text('Prices paid', style: t.textTheme.titleMedium),

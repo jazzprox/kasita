@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../api.dart';
 import '../main.dart';
@@ -179,9 +180,21 @@ class _PurchaseSheetState extends State<_PurchaseSheet> {
             title: Text(
               _bestBefore == null ? 'No best-before date' : 'Best before ${dateFmtYear.format(_bestBefore!)}',
             ),
-            trailing: _bestBefore == null
-                ? null
-                : IconButton(icon: const Icon(Icons.clear), onPressed: () => setState(() => _bestBefore = null)),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  tooltip: 'Read the date from a photo',
+                  icon: const Icon(Icons.photo_camera_outlined),
+                  onPressed: () async {
+                    final d = await dateFromPhoto(context);
+                    if (d != null && mounted) setState(() => _bestBefore = d);
+                  },
+                ),
+                if (_bestBefore != null)
+                  IconButton(icon: const Icon(Icons.clear), onPressed: () => setState(() => _bestBefore = null)),
+              ],
+            ),
             onTap: () async {
               final now = DateTime.now();
               final d = await showDatePicker(
@@ -239,5 +252,51 @@ class _PurchaseSheetState extends State<_PurchaseSheet> {
         ],
       ),
     );
+  }
+}
+
+/// Photograph the date printed on a pack; ChatGPT reads it. Null when cancelled or unreadable.
+Future<DateTime?> dateFromPhoto(BuildContext context) async {
+  final s = Kasita.read(context);
+  final XFile? shot;
+  try {
+    shot = await ImagePicker().pickImage(source: ImageSource.camera, maxWidth: 1600, imageQuality: 88);
+  } catch (e) {
+    if (context.mounted) toast(context, 'Could not open the camera: $e', error: true);
+    return null;
+  }
+  if (shot == null || !context.mounted) return null;
+  final bytes = await shot.readAsBytes();
+  if (!context.mounted) return null;
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => const AlertDialog(
+      content: Row(
+        children: [
+          CircularProgressIndicator(),
+          SizedBox(width: 20),
+          Expanded(child: Text('Reading the date…')),
+        ],
+      ),
+    ),
+  );
+  try {
+    final r = await s.api.readDate(s.hid, bytes);
+    if (!context.mounted) return null;
+    Navigator.of(context).pop();
+    final d = r['date'] == null ? null : DateTime.tryParse(r['date']);
+    if (d == null) {
+      toast(context, "Couldn't read a date there. Try closer, or pick it by hand.");
+    } else {
+      toast(context, 'Read "${r['printed'] ?? r['date']}": ${dateFmtYear.format(d)}');
+    }
+    return d;
+  } on ApiException catch (e) {
+    if (context.mounted) {
+      Navigator.of(context).pop();
+      toast(context, e.message, error: true);
+    }
+    return null;
   }
 }

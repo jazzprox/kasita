@@ -109,6 +109,9 @@ class _PantryScreenState extends State<PantryScreen> {
   Widget _tile(BuildContext context, StockProduct s) {
     final p = s.product;
     final opened = s.entries.any((e) => e.openedAt != null);
+    final frozen = s.entries.isNotEmpty && s.entries.every((e) => e.frozenAt != null);
+    final frozenSince = frozen ? s.entries.map((e) => e.frozenAt!).reduce((a, b) => a.isBefore(b) ? a : b) : null;
+    final runsOut = p.runsOutInDays;
     return ListTile(
       leading: ProductThumb(p.imageUrl),
       title: Text(p.name),
@@ -116,6 +119,10 @@ class _PantryScreenState extends State<PantryScreen> {
         children: [
           Text('${fmtQty(s.total)} ${p.unit}'),
           if (opened) ...[const SizedBox(width: 8), const Text('· opened')],
+          if (runsOut != null && runsOut <= 7) ...[
+            const SizedBox(width: 8),
+            Text('· runs out in ~${runsOut.ceil()}d', style: TextStyle(color: Colors.orange.shade800)),
+          ],
           if (p.minStock > 0 && s.total < p.minStock) ...[
             const SizedBox(width: 8),
             Text('· low', style: TextStyle(color: Theme.of(context).colorScheme.error)),
@@ -125,7 +132,7 @@ class _PantryScreenState extends State<PantryScreen> {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          ExpiryChip(p.nextBestBefore),
+          if (frozen) FrozenChip(frozenSince!) else ExpiryChip(p.nextBestBefore),
           IconButton(
             tooltip: 'Used one',
             icon: const Icon(Icons.remove_circle_outline),

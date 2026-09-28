@@ -218,6 +218,16 @@ class Api {
       Map<String, dynamic>.from(await post('${_h(hid)}/cook', {'note': note}));
   Future<Map<String, dynamic>> contribute(String hid, String pid) async =>
       Map<String, dynamic>.from(await post('${_h(hid)}/products/$pid/contribute'));
+
+  /// A purchase, returning the new batch (id, event_id...).
+  Future<Map<String, dynamic>> purchaseEntry(String hid, Map<String, dynamic> body) async =>
+      Map<String, dynamic>.from(await post('${_h(hid)}/stock/purchase', body));
+  Future<void> patchEntry(String hid, String entryId, Map<String, dynamic> body) =>
+      patch('${_h(hid)}/stock/entries/$entryId', body);
+
+  /// Photo of a printed date -> {"date": "YYYY-MM-DD" | null, "printed": text}.
+  Future<Map<String, dynamic>> readDate(String hid, Uint8List photo) async =>
+      Map<String, dynamic>.from(await upload('${_h(hid)}/stock/read-date', [(photo, 'date.jpg')]));
   Future<void> undoStock(String hid, List<String> eventIds) => post('${_h(hid)}/stock/undo', {'event_ids': eventIds});
   Future<Map<String, dynamic>> consume(String hid, String pid, double qty, {bool spoiled = false}) async =>
       Map<String, dynamic>.from(

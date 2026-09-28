@@ -8,6 +8,7 @@ under a random name, served without login like the Open Food Facts images are.
 import base64
 import io
 import uuid
+from datetime import date
 from pathlib import Path
 
 from PIL import Image, ImageOps
@@ -68,3 +69,39 @@ def identify(db: Session, household_id: str, data: bytes) -> dict:
         else categories.guess(got.get("name"))
     return {"found": True, "name": str(got["name"])[:255], "brand": (got.get("brand") or None),
             "quantity_text": (got.get("size") or None), "category": category, "image_url": image_url}
+
+
+DATE_INSTRUCTIONS = """You read the best-before / use-by / expiry date printed on food or household packaging.
+Reply with ONLY a JSON object: {"date": "YYYY-MM-DD" or null, "printed": "the text as printed" or null}
+- Formats vary: 12/10/2026, 12.10.26, 2026-10-12, OCT 12 2026, 12 OCT, EXP 10/2026, BB 12OCT26, "Best before end: 10 2026".
+- Day/month order: most packs here are European or Latin American (day first); US imports print month first
+  (e.g. 10/12/2026 on a US brand is October 12). Choose the reading that is a plausible future date.
+- Only a month and year: use the LAST day of that month. No year: the next occurrence of that day.
+- Ignore production dates (PROD, MFG, L/lot numbers). No readable date: {"date": null}."""
+
+
+def ask_date(db: Session, household_id: str, jpeg: bytes) -> dict:
+    """Tests replace this function."""
+    secret = chatgpt.fresh_secret(db, household_id)
+    text = codex.respond(secret, chatgpt.model_for(db, household_id), DATE_INSTRUCTIONS, [
+        {"type": "input_text", "text": f"Today is {date.today().isoformat()}. What date is printed?"},
+        {"type": "input_image", "image_url": "data:image/jpeg;base64," + base64.b64encode(jpeg).decode(),
+         "detail": "high"},
+    ], timeout=60)
+    return extract_json(text)
+
+
+def read_date(db: Session, household_id: str, data: bytes) -> dict:
+    try:
+        img = ImageOps.exif_transpose(Image.open(io.BytesIO(data))).convert("RGB")
+    except Exception as e:  # noqa: BLE001
+        raise ValueError("That file is not an image Kasita can read") from e
+    img.thumbnail((1600, 1600))
+    buf = io.BytesIO()
+    img.save(buf, "JPEG", quality=88)
+    got = ask_date(db, household_id, buf.getvalue())
+    try:
+        d = date.fromisoformat(str(got.get("date"))[:10]) if got.get("date") else None
+    except ValueError:
+        d = None
+    return {"date": d.isoformat() if d else None, "printed": got.get("printed")}

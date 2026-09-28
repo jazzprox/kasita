@@ -131,6 +131,7 @@ class ProductIn(BaseModel):
     default_location_id: str | None = None
     min_stock: Decimal = Decimal(0)
     shelf_life_days: int | None = None
+    open_days: int | None = Field(default=None, ge=1, le=365)
     notes: str | None = None
     barcodes: list[str] = []
 
@@ -144,6 +145,7 @@ class ProductPatch(BaseModel):
     default_location_id: str | None = None
     min_stock: Decimal | None = None
     shelf_life_days: int | None = None
+    open_days: int | None = Field(default=None, ge=1, le=365)
     notes: str | None = None
     archived: bool | None = None
 
@@ -164,6 +166,8 @@ class ProductOut(ORM):
     in_stock: Decimal = Decimal(0)
     next_best_before: date | None = None
     shareable: bool = False  # has a barcode no database knows: can be given to Open Food Facts
+    open_days: int | None = None
+    runs_out_in_days: float | None = None  # from how fast it gets used; None = not enough history
 
 
 class BarcodeLookupOut(BaseModel):
@@ -210,7 +214,13 @@ class StockEntryOut(ORM):
     unit_price: Decimal | None
     location_id: str | None
     store_id: str | None
+    frozen_at: date | None = None
     event_id: str | None = None  # set on a fresh purchase, for undo
+
+
+class EntryPatch(BaseModel):
+    best_before: date | None = None
+    location_id: str | None = None
 
 
 class UndoIn(BaseModel):

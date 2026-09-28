@@ -1,13 +1,13 @@
 from datetime import date, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..deps import HouseholdAccess, household_access
 from ..models import Location, Product, StockEntry, StockEvent, Store
-from ..schemas import ConsumeIn, OpenIn, PurchaseIn, StockEntryOut, StockEventOut, StockProductOut, UndoIn
+from ..schemas import ConsumeIn, EntryPatch, OpenIn, PurchaseIn, StockEntryOut, StockEventOut, StockProductOut, UndoIn
 from ..services import stock as svc
 from .products import product_out
 
@@ -104,3 +104,39 @@ def spending(days: int = 30, a: HouseholdAccess = Depends(household_access), db:
     """What priced purchases (receipts, or prices typed when buying) cost, per category and store."""
     from ..services.digest import spending as calc
     return calc(db, a.household.id, days=max(1, min(days, 366)))
+
+
+
+@router.patch("/entries/{entry_id}", response_model=StockEntryOut)
+def patch_entry(entry_id: str, body: EntryPatch, a: HouseholdAccess = Depends(household_access),
+                db: Session = Depends(get_db)):
+    """Set a batch's best-before date, or move it (into a freezer: the frozen date starts today)."""
+    e = db.get(StockEntry, entry_id)
+    if not e or e.household_id != a.household.id:
+        raise HTTPException(404, "Batch not found")
+    fields = body.model_dump(exclude_unset=True)
+    if "best_before" in fields:
+        e.best_before = fields["best_before"]
+    if "location_id" in fields and fields["location_id"] != e.location_id:
+        _check_ref(db, Location, fields["location_id"], a.household.id, "Location")
+        to = db.get(Location, fields["location_id"]) if fields["location_id"] else None
+        e.location_id = fields["location_id"]
+        e.frozen_at = (e.frozen_at or date.today()) if to is not None and to.is_freezer else None
+    db.commit()
+    return e
+
+
+@router.post("/read-date")
+async def read_date(file: UploadFile = File(...), a: HouseholdAccess = Depends(household_access),
+                    db: Session = Depends(get_db)):
+    """Photo of the date printed on a pack -> {"date": "YYYY-MM-DD" | null} (household's ChatGPT)."""
+    from ..services import codex, identify
+    data = await file.read(20 * 1024 * 1024 + 1)
+    if len(data) > 20 * 1024 * 1024:
+        raise HTTPException(413, "Photo is larger than 20 MB")
+    try:
+        return identify.read_date(db, a.household.id, data)
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+    except codex.CodexError as e:
+        raise HTTPException(502, str(e)) from e

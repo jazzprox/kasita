@@ -6,6 +6,7 @@ import '../api.dart';
 import '../main.dart';
 import '../models.dart';
 import '../widgets.dart';
+import 'actions.dart';
 import 'unknown_barcode.dart';
 
 enum PassMode { add, use }
@@ -14,6 +15,7 @@ enum PassMode { add, use }
 class _Tally {
   final Product product;
   final List<(int, String)> events = []; // (+1 or -1, stock event ids) per step, newest last, for undo
+  final List<String> batches = []; // batches this pass added (newest last): the date button dates the last
   _Tally(this.product);
   int get added => events.where((e) => e.$1 > 0).length;
   int get used => events.where((e) => e.$1 < 0).length;
@@ -98,8 +100,9 @@ class _PantryPassScreenState extends State<PantryPassScreen> {
     final tally = _tallies.putIfAbsent(p.id, () => _Tally(p));
     String flash;
     if (dir > 0) {
-      final ev = await s.api.purchase(s.hid, {'product_id': p.id, 'quantity': 1});
-      if (ev != null) tally.events.add((1, ev));
+      final entry = await s.api.purchaseEntry(s.hid, {'product_id': p.id, 'quantity': 1});
+      if (entry['event_id'] != null) tally.events.add((1, entry['event_id'] as String));
+      tally.batches.add(entry['id'] as String);
       flash = '+1 ${p.name}';
     } else {
       final res = await s.api.consume(s.hid, p.id, 1);
@@ -114,6 +117,23 @@ class _PantryPassScreenState extends State<PantryPassScreen> {
     HapticFeedback.mediumImpact();
     s.changed();
     if (mounted) setState(() => _flash = flash);
+  }
+
+  /// Read the printed date off the pack and put it on the batch this pass just added.
+  Future<void> _dateLast(_Tally t) async {
+    final s = Kasita.read(context);
+    await _controller.stop();
+    if (!mounted) return;
+    final d = await dateFromPhoto(context);
+    if (mounted) await _controller.start();
+    if (d == null || !mounted) return;
+    try {
+      await s.api.patchEntry(s.hid, t.batches.last, {'best_before': d.toIso8601String().substring(0, 10)});
+      s.changed();
+      if (mounted) setState(() => _flash = '${t.product.name}: best before ${dateFmtYear.format(d)}');
+    } on ApiException catch (e) {
+      if (mounted) toast(context, e.message, error: true);
+    }
   }
 
   /// The minus button: take back the last thing this pass did to that product.
@@ -232,6 +252,12 @@ class _PantryPassScreenState extends State<PantryPassScreen> {
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        if (adding && x.batches.isNotEmpty)
+                          IconButton(
+                            tooltip: 'Photo of its date',
+                            icon: const Icon(Icons.event_outlined),
+                            onPressed: _busy ? null : () => _dateLast(x),
+                          ),
                         IconButton(
                           tooltip: 'Take the last one back',
                           icon: const Icon(Icons.remove_circle_outline),

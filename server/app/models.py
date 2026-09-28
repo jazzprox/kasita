@@ -150,6 +150,7 @@ class Product(Base):
     default_location_id: Mapped[str | None] = mapped_column(ForeignKey("locations.id", ondelete="SET NULL"))
     min_stock: Mapped[Decimal] = mapped_column(Qty, default=0)  # below this it goes on the shopping list
     shelf_life_days: Mapped[int | None]  # default best-before offset when none is entered
+    open_days: Mapped[int | None]  # keeps this many days once opened (milk 5, salsa 14...)
     notes: Mapped[str | None] = mapped_column(Text)
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
@@ -179,6 +180,7 @@ class StockEntry(Base):
     quantity: Mapped[Decimal] = mapped_column(Qty)
     best_before: Mapped[date | None] = mapped_column(Date)
     opened_at: Mapped[date | None] = mapped_column(Date)
+    frozen_at: Mapped[date | None] = mapped_column(Date)  # when it went into a freezer location
     purchased_at: Mapped[date] = mapped_column(Date, default=lambda: date.today())
     unit_price: Mapped[Decimal | None] = mapped_column(Money)
     store_id: Mapped[str | None] = mapped_column(ForeignKey("stores.id", ondelete="SET NULL"))

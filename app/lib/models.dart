@@ -37,6 +37,8 @@ class Product {
   final List<String> barcodes;
   final DateTime? nextBestBefore;
   final bool shareable; // a barcode no database knows: can be given to Open Food Facts
+  final int? openDays; // keeps this many days once opened
+  final double? runsOutInDays; // forecast from usage; null = not enough history
 
   Product.fromJson(Map<String, dynamic> j)
     : id = j['id'],
@@ -52,13 +54,15 @@ class Product {
       shelfLifeDays = j['shelf_life_days'],
       barcodes = List<String>.from(j['barcodes'] ?? const []),
       nextBestBefore = _date(j['next_best_before']),
-      shareable = j['shareable'] ?? false;
+      shareable = j['shareable'] ?? false,
+      openDays = j['open_days'],
+      runsOutInDays = _numOrNull(j['runs_out_in_days']);
 }
 
 class StockEntry {
   final String id;
   final double quantity;
-  final DateTime? bestBefore, openedAt;
+  final DateTime? bestBefore, openedAt, frozenAt;
   final DateTime purchasedAt;
   final double? unitPrice;
   final String? locationId, storeId;
@@ -67,6 +71,7 @@ class StockEntry {
       quantity = _num(j['quantity']),
       bestBefore = _date(j['best_before']),
       openedAt = _date(j['opened_at']),
+      frozenAt = _date(j['frozen_at']),
       purchasedAt = _date(j['purchased_at']) ?? DateTime.now(),
       unitPrice = _numOrNull(j['unit_price']),
       locationId = j['location_id'],

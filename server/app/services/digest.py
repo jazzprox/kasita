@@ -12,7 +12,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..config import settings
-from ..models import Household, Product, StockEntry, StockEvent, Store
+from ..models import Household, Location, Product, StockEntry, StockEvent, Store
 
 
 def expiring(db: Session, household_id: str, today: date | None = None) -> dict[str, list[str]]:
@@ -21,7 +21,9 @@ def expiring(db: Session, household_id: str, today: date | None = None) -> dict[
     rows = db.execute(
         select(Product.name, func.min(StockEntry.best_before))
         .join(StockEntry, StockEntry.product_id == Product.id)
-        .where(Product.household_id == household_id, StockEntry.quantity > 0, StockEntry.best_before.is_not(None))
+        .outerjoin(Location, Location.id == StockEntry.location_id)
+        .where(Product.household_id == household_id, StockEntry.quantity > 0, StockEntry.best_before.is_not(None),
+               Location.is_freezer.is_not(True))  # frozen food doesn't go off on its printed date
         .group_by(Product.id, Product.name)
     ).all()
     out: dict[str, list[str]] = {"expired": [], "today": [], "tomorrow": []}
@@ -95,3 +97,16 @@ def send(title: str, message: str, tags: str = "shopping_cart", priority: str = 
     r = httpx.post(f"{settings.ntfy_url.rstrip('/')}/{settings.ntfy_topic}", content=message.encode("utf-8"),
                    headers=headers, timeout=20)
     r.raise_for_status()
+
+
+def forgotten_in_freezer(db: Session, household_id: str, days: int = 60, today: date | None = None) -> list[str]:
+    """Freezer batches older than `days`: the monthly 'use these up' nudge."""
+    today = today or date.today()
+    rows = db.execute(
+        select(Product.name, func.min(StockEntry.frozen_at))
+        .join(StockEntry, StockEntry.product_id == Product.id)
+        .where(Product.household_id == household_id, StockEntry.quantity > 0, StockEntry.frozen_at.is_not(None),
+               StockEntry.frozen_at <= today - timedelta(days=days))
+        .group_by(Product.id, Product.name)
+    ).all()
+    return [f"{name} (frozen {(today - since).days // 7} weeks ago)" for name, since in sorted(rows, key=lambda r: r[1])]

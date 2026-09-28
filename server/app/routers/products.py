@@ -20,12 +20,19 @@ from ..services.stock import get_product, in_stock
 router = APIRouter(prefix="/api/households/{household_id}", tags=["products"])
 
 
+def _runs_out(db: Session, p: Product) -> float | None:
+    from ..services.stock import forecast
+    fc = forecast(db, p)
+    return round(fc[1], 1) if fc else None
+
+
 def product_out(db: Session, p: Product) -> ProductOut:
     nxt = db.scalar(select(func.min(StockEntry.best_before)).where(
         StockEntry.product_id == p.id, StockEntry.quantity > 0))
-    fields = {k: getattr(p, k) for k in ProductOut.model_fields if k not in ("barcodes", "in_stock", "next_best_before", "shareable")}
+    fields = {k: getattr(p, k) for k in ProductOut.model_fields if k not in ("barcodes", "in_stock", "next_best_before", "shareable", "runs_out_in_days")}
     return ProductOut(**fields, barcodes=[b.barcode for b in p.barcodes], in_stock=in_stock(db, p.id),
-                      next_best_before=nxt, shareable=contrib.shareable_barcode(db, p) is not None)
+                      next_best_before=nxt, shareable=contrib.shareable_barcode(db, p) is not None,
+                      runs_out_in_days=_runs_out(db, p))
 
 
 def _attach_barcodes(db: Session, household_id: str, product: Product, codes: list[str]) -> None:

@@ -97,3 +97,31 @@ class EmptyState extends StatelessWidget {
     );
   }
 }
+
+/// "frozen 3w": how long a batch has been in the freezer (frozen food doesn't expire on its printed date).
+class FrozenChip extends StatelessWidget {
+  final DateTime since;
+  const FrozenChip(this.since, {super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final days = DateUtils.dateOnly(DateTime.now()).difference(DateUtils.dateOnly(since)).inDays;
+    final label = days < 7 ? (days <= 0 ? 'frozen today' : 'frozen ${days}d') : 'frozen ${days ~/ 7}w';
+    final color = days > 90 ? Colors.orange.shade800 : Colors.lightBlue.shade700;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(12)),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.ac_unit, size: 13, color: color),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600),
+          ),
+        ],
+      ),
+    );
+  }
+}

@@ -26,6 +26,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
   late final _unit = TextEditingController(text: widget.product?.unit ?? 'pcs');
   late final _min = TextEditingController(text: widget.product == null ? '0' : fmtQty(widget.product!.minStock));
   late final _shelf = TextEditingController(text: widget.product?.shelfLifeDays?.toString() ?? '');
+  late final _openDays = TextEditingController(text: widget.product?.openDays?.toString() ?? '');
   late String? _location = widget.product?.defaultLocationId;
   bool _busy = false;
 
@@ -56,6 +57,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       'unit': _unit.text.trim().isEmpty ? 'pcs' : _unit.text.trim(),
       'min_stock': _min.text.trim().isEmpty ? '0' : _min.text.trim().replaceAll(',', '.'),
       'shelf_life_days': int.tryParse(_shelf.text.trim()),
+      'open_days': int.tryParse(_openDays.text.trim()),
       'default_location_id': _location,
     };
     try {
@@ -159,6 +161,16 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
               decoration: const InputDecoration(
                 labelText: 'Usually keeps for (days)',
                 helperText: 'Pre-fills the best-before date when you buy it',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _openDays,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Keeps once opened (days)',
+                helperText: 'Tapping Opened sets its date to this many days from then (milk 5, salsa 14)',
                 border: OutlineInputBorder(),
               ),
             ),

@@ -69,10 +69,9 @@ def clear_done(a: HouseholdAccess = Depends(household_access), db: Session = Dep
 
 @router.post("/refill", response_model=list[ShoppingOut])
 def refill(a: HouseholdAccess = Depends(household_access), db: Session = Depends(get_db)):
-    """Add everything that is below its minimum stock (skips items already on the list)."""
+    """Add everything below its minimum stock or forecast to run out within days (skips items already on the list)."""
     added = []
-    for p in db.scalars(select(Product).where(Product.household_id == a.household.id, Product.min_stock > 0,
-                                              Product.archived.is_(False))):
+    for p in db.scalars(select(Product).where(Product.household_id == a.household.id, Product.archived.is_(False))):
         item = refill_if_low(db, a.household.id, p)
         if item is not None:
             added.append(item)
