@@ -148,3 +148,27 @@ def test_attach_barcode_to_receipt_product_fills_gaps(client, jazz):
     assert out["name"] == "Cola from receipt"  # the household's own name is kept
     # scanning it now finds the household product
     assert client.get(f"/api/households/{hid}/barcodes/5449000000996", headers=h).json()["product"]["id"] == p["id"]
+
+
+def test_pantry_pass_undo(client, jazz):
+    h, hid = jazz
+    base = f"/api/households/{hid}"
+    p = client.post(f"{base}/products", json={"name": "Rice"}, headers=h).json()
+    stock = lambda: float(client.get(f"{base}/products/{p['id']}", headers=h).json()["in_stock"])  # noqa: E731
+    a1 = client.post(f"{base}/stock/purchase", json={"product_id": p["id"]}, headers=h).json()
+    a2 = client.post(f"{base}/stock/purchase", json={"product_id": p["id"]}, headers=h).json()
+    assert a1["event_id"] and stock() == 2
+    # minus: undo the last add exactly
+    assert client.post(f"{base}/stock/undo", json={"event_ids": [a2["event_id"]]}, headers=h).status_code == 200
+    assert stock() == 1
+    # use one, then undo the use: back to 1
+    used = client.post(f"{base}/stock/consume", json={"product_id": p["id"]}, headers=h).json()
+    assert stock() == 0 and len(used["event_ids"]) == 1
+    assert client.post(f"{base}/stock/undo", json={"event_ids": used["event_ids"]}, headers=h).status_code == 200
+    assert stock() == 1
+    # an add that has since been partly used can't be silently erased
+    client.post(f"{base}/stock/consume", json={"product_id": p["id"], "quantity": 0.5}, headers=h)
+    assert client.post(f"{base}/stock/undo", json={"event_ids": [a1["event_id"]]}, headers=h).status_code == 409
+    # another household's events are invisible
+    other = login(client, *make_user(email="undo-other@example.com"))
+    assert client.post(f"{base}/stock/undo", json={"event_ids": [a1["event_id"]]}, headers=other).status_code == 404

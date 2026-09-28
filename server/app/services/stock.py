@@ -49,8 +49,9 @@ def _consume_order(entries: list[StockEntry]) -> list[StockEntry]:
 
 
 def consume(db: Session, household_id: str, user_id: str | None, product: Product, quantity: Decimal,
-            spoiled: bool = False) -> Decimal:
-    """Take `quantity` out of stock. Returns how much was actually available."""
+            spoiled: bool = False, events: list | None = None) -> Decimal:
+    """Take `quantity` out of stock. Returns how much was actually available.
+    Pass a list as `events` to get the StockEvents written (for undo)."""
     entries = _consume_order(list(db.scalars(select(StockEntry).where(
         StockEntry.product_id == product.id, StockEntry.quantity > 0))))
     remaining = quantity
@@ -60,8 +61,11 @@ def consume(db: Session, household_id: str, user_id: str | None, product: Produc
         take = min(e.quantity, remaining)
         e.quantity -= take
         remaining -= take
-        db.add(StockEvent(household_id=household_id, product_id=product.id, entry_id=e.id,
-                          kind="spoil" if spoiled else "consume", quantity=take, user_id=user_id))
+        ev = StockEvent(household_id=household_id, product_id=product.id, entry_id=e.id,
+                        kind="spoil" if spoiled else "consume", quantity=take, user_id=user_id)
+        db.add(ev)
+        if events is not None:
+            events.append(ev)
     taken = quantity - remaining
     db.flush()
     refill_if_low(db, household_id, product)
@@ -94,3 +98,23 @@ def refill_if_low(db: Session, household_id: str, product: Product) -> ShoppingI
                         quantity=max(product.min_stock - have, Decimal(1)), auto=True)
     db.add(item)
     return item
+
+
+def undo(db: Session, household_id: str, event: StockEvent) -> None:
+    """Reverse one stock event and delete it: a purchase removes the batch it created
+    (only while nothing has been taken from it); a consume/spoil puts the quantity back."""
+    entry = db.get(StockEntry, event.entry_id) if event.entry_id else None
+    if event.kind == "purchase":
+        if entry is not None:
+            others = db.scalar(select(func.count()).select_from(StockEvent).where(
+                StockEvent.entry_id == entry.id, StockEvent.id != event.id))
+            if others or entry.quantity != event.quantity:
+                raise HTTPException(409, "Some of that has been used since; use 'Used one' instead")
+            db.delete(entry)
+    elif event.kind in ("consume", "spoil"):
+        if entry is None:
+            raise HTTPException(409, "That batch no longer exists")
+        entry.quantity += event.quantity
+    else:
+        raise HTTPException(409, f"A '{event.kind}' cannot be undone here")
+    db.delete(event)

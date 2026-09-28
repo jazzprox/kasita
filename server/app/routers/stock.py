@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..deps import HouseholdAccess, household_access
 from ..models import Location, Product, StockEntry, StockEvent, Store
-from ..schemas import ConsumeIn, OpenIn, PurchaseIn, StockEntryOut, StockEventOut, StockProductOut
+from ..schemas import ConsumeIn, OpenIn, PurchaseIn, StockEntryOut, StockEventOut, StockProductOut, UndoIn
 from ..services import stock as svc
 from .products import product_out
 
@@ -53,15 +53,30 @@ def purchase(body: PurchaseIn, a: HouseholdAccess = Depends(household_access), d
                      location_id=body.location_id, unit_price=body.unit_price, store_id=body.store_id,
                      purchased_at=body.purchased_at)
     db.commit()
-    return e
+    ev = db.scalar(select(StockEvent).where(StockEvent.entry_id == e.id, StockEvent.kind == "purchase"))
+    return StockEntryOut.model_validate(e).model_copy(update={"event_id": ev.id if ev else None})
 
 
 @router.post("/consume")
 def consume(body: ConsumeIn, a: HouseholdAccess = Depends(household_access), db: Session = Depends(get_db)):
     p = svc.get_product(db, a.household.id, body.product_id)
-    taken = svc.consume(db, a.household.id, a.user.id, p, body.quantity, spoiled=body.spoiled)
+    written: list = []
+    taken = svc.consume(db, a.household.id, a.user.id, p, body.quantity, spoiled=body.spoiled, events=written)
     db.commit()
-    return {"consumed": taken, "remaining": svc.in_stock(db, p.id), "short_by": body.quantity - taken}
+    return {"consumed": taken, "remaining": svc.in_stock(db, p.id), "short_by": body.quantity - taken,
+            "event_ids": [ev.id for ev in written]}
+
+
+@router.post("/undo")
+def undo(body: UndoIn, a: HouseholdAccess = Depends(household_access), db: Session = Depends(get_db)):
+    """Reverse recent adds/uses (the pantry pass's minus button), all or nothing."""
+    for event_id in body.event_ids:
+        ev = db.get(StockEvent, event_id)
+        if not ev or ev.household_id != a.household.id:
+            raise HTTPException(404, "Stock event not found")
+        svc.undo(db, a.household.id, ev)
+    db.commit()
+    return {"undone": len(body.event_ids)}
 
 
 @router.post("/open", response_model=StockEntryOut)

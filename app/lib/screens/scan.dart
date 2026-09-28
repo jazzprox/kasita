@@ -7,8 +7,7 @@ import '../models.dart';
 import '../widgets.dart';
 import 'actions.dart';
 import 'product_detail.dart';
-import 'product_form.dart';
-import 'product_picker.dart';
+import 'unknown_barcode.dart';
 import 'receipts.dart';
 
 class ScanScreen extends StatefulWidget {
@@ -63,73 +62,12 @@ class _ScanScreenState extends State<ScanScreen> {
     }
   }
 
-  /// Returns the linked Product, true for "make a new one", or false when cancelled.
-  Future<Object> _existingOrNew(BarcodeResult r) async {
-    final choice = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      builder: (sheet) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              title: Text(r.name ?? 'Barcode ${r.barcode}', style: Theme.of(context).textTheme.titleMedium),
-              subtitle: Text(r.found ? 'New to your household' : 'Not in any product database'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.link),
-              title: const Text("It's one of my products"),
-              subtitle: const Text('Attach this barcode to it, e.g. something added from a receipt'),
-              onTap: () => Navigator.pop(sheet, 'link'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.add),
-              title: const Text('New product'),
-              onTap: () => Navigator.pop(sheet, 'new'),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (choice == 'new') return true;
-    if (choice != 'link' || !mounted) return false;
-    final s = Kasita.read(context);
-    final picked = await Navigator.of(context).push<Product>(
-      MaterialPageRoute(
-        builder: (_) => ProductPicker(
-          title: 'Attach ${r.barcode} to…',
-          hint: r.name == null ? 'Search your products' : 'Search (scanned: ${r.name})',
-          barcodeLessFirst: true,
-          emptyText: 'No match. Go back and choose New product.',
-        ),
-      ),
-    );
-    if (picked == null || !mounted) return false;
-    try {
-      final updated = await s.api.addBarcode(s.hid, picked.id, r.barcode);
-      s.changed();
-      if (mounted) toast(context, 'Barcode attached to ${updated.name}');
-      return updated;
-    } on ApiException catch (e) {
-      if (mounted) toast(context, e.message, error: true);
-      return false;
-    }
-  }
-
   Future<void> _showResult(BarcodeResult r) async {
     var product = r.product;
     if (product == null) {
       // new to this household: one of your products (e.g. from a receipt) or a new one?
-      final existing = await _existingOrNew(r);
-      if (!mounted || existing == false) return;
-      if (existing is Product) {
-        product = existing;
-      } else {
-        final created = await Navigator.of(context)
-            .push<Product>(MaterialPageRoute(builder: (_) => ProductFormScreen(prefill: r)));
-        if (created == null || !mounted) return;
-        product = created;
-      }
+      product = await productForUnknownBarcode(context, r);
+      if (product == null || !mounted) return;
     }
     final p = product;
     await showModalBottomSheet(

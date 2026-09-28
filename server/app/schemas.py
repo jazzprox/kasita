@@ -203,6 +203,11 @@ class StockEntryOut(ORM):
     unit_price: Decimal | None
     location_id: str | None
     store_id: str | None
+    event_id: str | None = None  # set on a fresh purchase, for undo
+
+
+class UndoIn(BaseModel):
+    event_ids: list[str] = Field(min_length=1, max_length=50)
 
 
 class StockProductOut(BaseModel):

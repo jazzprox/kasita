@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../main.dart';
 import '../models.dart';
 import '../widgets.dart';
+import 'pantry_pass.dart';
 import 'actions.dart';
 import 'product_detail.dart';
 
@@ -32,7 +33,19 @@ class _PantryScreenState extends State<PantryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Pantry')),
+      appBar: AppBar(
+        title: const Text('Pantry'),
+        actions: [
+          TextButton.icon(
+            onPressed: () async {
+              await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PantryPassScreen()));
+              if (mounted) setState(_load);
+            },
+            icon: const Icon(Icons.qr_code_scanner),
+            label: const Text('Pantry pass'),
+          ),
+        ],
+      ),
       body: FutureBuilder<List<StockProduct>>(
         future: _future,
         builder: (context, snap) {

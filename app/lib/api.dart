@@ -205,7 +205,10 @@ class Api {
   Future<BarcodeResult> barcode(String hid, String code) async =>
       BarcodeResult.fromJson(await get('${_h(hid)}/barcodes/${Uri.encodeComponent(code)}'));
 
-  Future<void> purchase(String hid, Map<String, dynamic> body) => post('${_h(hid)}/stock/purchase', body);
+  /// Returns the purchase's stock event id (for undo).
+  Future<String?> purchase(String hid, Map<String, dynamic> body) async =>
+      (await post('${_h(hid)}/stock/purchase', body) as Map)['event_id'] as String?;
+  Future<void> undoStock(String hid, List<String> eventIds) => post('${_h(hid)}/stock/undo', {'event_ids': eventIds});
   Future<Map<String, dynamic>> consume(String hid, String pid, double qty, {bool spoiled = false}) async =>
       Map<String, dynamic>.from(
         await post('${_h(hid)}/stock/consume', {'product_id': pid, 'quantity': qty, 'spoiled': spoiled}),
