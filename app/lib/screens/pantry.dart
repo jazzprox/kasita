@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../main.dart';
 import '../models.dart';
 import '../widgets.dart';
+import '../home_widget_sync.dart';
 import 'cook.dart';
 import 'pantry_pass.dart';
 import 'actions.dart';
@@ -19,7 +20,10 @@ class _PantryScreenState extends State<PantryScreen> {
   int _seen = -1;
   String _q = '';
 
-  void _load() => _future = Kasita.read(context).api.stock(Kasita.read(context).hid);
+  void _load() => _future = Kasita.read(context).api.stock(Kasita.read(context).hid).then((stock) {
+    syncPantryWidget(stock);
+    return stock;
+  });
 
   @override
   void didChangeDependencies() {

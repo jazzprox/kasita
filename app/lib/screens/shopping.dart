@@ -2,9 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:speech_to_text/speech_to_text.dart';
 
 import '../main.dart';
 import '../offline_shopping.dart';
+import '../home_widget_sync.dart';
+import '../spoken_list.dart';
 import '../models.dart';
 import '../widgets.dart';
 
@@ -20,6 +23,40 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
   int _seen = -1;
   bool _offline = false; // showing the list saved on the phone
   bool _byStore = false; // group by the store where each item was cheapest last time
+  final _speech = SpeechToText();
+  bool _listening = false;
+
+  /// Hold forth: "milk, two breads and dish soap" becomes three items.
+  Future<void> _voice() async {
+    if (_listening) {
+      await _speech.stop();
+      return;
+    }
+    final ok = await _speech.initialize(
+      onStatus: (st) {
+        if (mounted && (st == 'done' || st == 'notListening')) setState(() => _listening = false);
+      },
+    );
+    if (!ok) {
+      if (mounted) toast(context, 'Speech recognition is not available (microphone permission?)', error: true);
+      return;
+    }
+    setState(() => _listening = true);
+    await _speech.listen(
+      listenOptions: SpeechListenOptions(listenFor: const Duration(seconds: 20), pauseFor: const Duration(seconds: 3)),
+      onResult: (r) async {
+        if (!r.finalResult) return;
+        final items = parseSpokenList(r.recognizedWords);
+        if (items.isEmpty || !mounted) return;
+        _add.text = items.map((x) => x.$1 == 1 ? x.$2 : '${fmtQty(x.$1)}x ${x.$2}').join(', ');
+        await _addText();
+        if (mounted) {
+          toast(context, 'Added ${items.length} item${items.length == 1 ? '' : 's'}: "${r.recognizedWords}"');
+        }
+      },
+    );
+  }
+
   List<Map<String, dynamic>>? _stores;
   int _pending = 0; // changes waiting to be sent
   Timer? _retry;
@@ -51,6 +88,7 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
       await off.flush();
       final items = await s.api.shopping(s.hid, includeDone: true);
       await off.save(items);
+      syncShoppingWidget(items);
       final pending = await off.pendingCount();
       if (mounted) {
         setState(() {
@@ -310,7 +348,17 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
               decoration: InputDecoration(
                 hintText: 'Add items: 2x milk, bread',
                 border: const OutlineInputBorder(),
-                suffixIcon: IconButton(icon: const Icon(Icons.add), onPressed: _addText),
+                suffixIcon: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      tooltip: 'Say it: "milk, two breads and dish soap"',
+                      icon: Icon(_listening ? Icons.mic : Icons.mic_none, color: _listening ? Colors.red : null),
+                      onPressed: _voice,
+                    ),
+                    IconButton(icon: const Icon(Icons.add), onPressed: _addText),
+                  ],
+                ),
               ),
             ),
           ),

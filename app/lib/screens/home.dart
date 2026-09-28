@@ -1,10 +1,18 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import 'package:quick_actions/quick_actions.dart';
 
 import 'pantry.dart';
 import 'pantry_pass.dart';
 import 'receipts.dart';
+import '../api.dart';
+import '../main.dart';
+import '../spoken_list.dart';
+import '../widgets.dart';
 import 'products.dart';
 import 'scan.dart';
 import 'settings.dart';
@@ -18,6 +26,39 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _tab = 0;
+  StreamSubscription<List<SharedMediaFile>>? _shareSub;
+
+  @override
+  void dispose() {
+    _shareSub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _shared(List<SharedMediaFile> files) async {
+    if (!mounted || files.isEmpty) return;
+    final s = Kasita.read(context);
+    final images = files.where((f) => f.type == SharedMediaType.image).toList();
+    final texts = files.where((f) => f.type == SharedMediaType.text || f.type == SharedMediaType.url).toList();
+    try {
+      if (images.isNotEmpty) {
+        final parts = [for (final f in images) (await File(f.path).readAsBytes(), f.path.split('/').last)];
+        final receipt = await s.api.uploadReceipt(s.hid, parts);
+        if (!mounted) return;
+        await Navigator.of(context).push(MaterialPageRoute(builder: (_) => ReceiptReviewScreen(receiptId: receipt.id)));
+      } else if (texts.isNotEmpty) {
+        final items = parseSpokenList(texts.map((t) => t.path).join(', ').replaceAll('\n', ', '));
+        for (final (qty, name) in items) {
+          await s.api.addShopping(s.hid, name: name, quantity: qty);
+        }
+        s.changed();
+        if (!mounted) return;
+        setState(() => _tab = 1);
+        toast(context, 'Added ${items.length} to the shopping list');
+      }
+    } on ApiException catch (e) {
+      if (mounted) toast(context, e.message, error: true);
+    }
+  }
 
   /// Long-press the app icon: Pantry pass, Scan receipt, Shopping list.
   @override
@@ -36,6 +77,12 @@ class _HomeScreenState extends State<HomeScreen> {
           scanReceipt(context);
       }
     });
+    // Share -> Kasita: photos become a receipt, text goes on the shopping list
+    ReceiveSharingIntent.instance.getInitialMedia().then((files) {
+      if (files.isNotEmpty) WidgetsBinding.instance.addPostFrameCallback((_) => _shared(files));
+      ReceiveSharingIntent.instance.reset();
+    });
+    _shareSub = ReceiveSharingIntent.instance.getMediaStream().listen(_shared);
     actions.setShortcutItems(const [
       ShortcutItem(type: 'pass', localizedTitle: 'Pantry pass'),
       ShortcutItem(type: 'receipt', localizedTitle: 'Scan receipt'),

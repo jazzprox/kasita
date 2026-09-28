@@ -15,7 +15,7 @@ val keyProps = Properties().apply {
 
 android {
     namespace = "cw.jazzproxy.kasita"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = maxOf(flutter.compileSdkVersion, 37)  // receive_sharing_intent is built against 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

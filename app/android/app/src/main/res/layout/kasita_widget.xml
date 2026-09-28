@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="12dp"
+    android:background="@drawable/kasita_widget_bg">
+
+    <TextView
+        android:id="@+id/widget_shopping_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Shopping list"
+        android:textColor="#2E7D5B"
+        android:textSize="14sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/widget_shopping"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:paddingTop="4dp"
+        android:text=""
+        android:textColor="#1B1B1B"
+        android:textSize="13sp"
+        android:ellipsize="end" />
+
+    <TextView
+        android:id="@+id/widget_soon"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingTop="4dp"
+        android:text=""
+        android:textColor="#B3261E"
+        android:textSize="12sp"
+        android:maxLines="2"
+        android:ellipsize="end" />
+</LinearLayout>
