@@ -6,6 +6,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
+from ..config import settings
 from ..db import get_db
 from ..deps import HouseholdAccess, household_access
 from ..models import Product, ProductBarcode, StockEntry, StockEvent, Store
@@ -194,3 +195,40 @@ def what_can_i_cook(body: CookIn, a: HouseholdAccess = Depends(household_access)
         return cooking.suggest(db, a.household.id, body.note)
     except codex.CodexError as e:
         raise HTTPException(502, str(e)) from e
+
+
+
+def _drop_local_photo(image_url: str | None) -> None:
+    """Delete a photo Kasita stored (never touches Open Food Facts pictures, which are just links)."""
+    if image_url and "/api/product-images/" in image_url:
+        household, name = image_url.split("/api/product-images/", 1)[1].split("/", 1)
+        if re.fullmatch(r"[0-9a-f]{32}\.jpg", name):
+            (ident.product_images_dir(household) / name).unlink(missing_ok=True)
+
+
+@router.post("/products/{product_id}/photo", response_model=ProductOut)
+async def set_photo(product_id: str, file: UploadFile = File(...), a: HouseholdAccess = Depends(household_access),
+                    db: Session = Depends(get_db)):
+    """Take or pick a new picture for the product (replaces the old one)."""
+    p = get_product(db, a.household.id, product_id)
+    data = await file.read(20 * 1024 * 1024 + 1)
+    if len(data) > 20 * 1024 * 1024:
+        raise HTTPException(413, "Photo is larger than 20 MB")
+    try:
+        name, _ = ident.store_photo(a.household.id, data)
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+    old = p.image_url
+    p.image_url = f"{settings.public_url.rstrip('/')}/api/product-images/{a.household.id}/{name}"
+    db.commit()
+    _drop_local_photo(old)
+    return product_out(db, p)
+
+
+@router.delete("/products/{product_id}/photo", response_model=ProductOut)
+def remove_photo(product_id: str, a: HouseholdAccess = Depends(household_access), db: Session = Depends(get_db)):
+    p = get_product(db, a.household.id, product_id)
+    old, p.image_url = p.image_url, None
+    db.commit()
+    _drop_local_photo(old)
+    return product_out(db, p)

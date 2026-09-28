@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../api.dart';
 
@@ -110,6 +111,59 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     }
   }
 
+  /// Tap the picture: take a new one, pick one, or remove it.
+  Future<void> _photo() async {
+    final s = Kasita.read(context);
+    final p = _p!;
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (c) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: Text(p.imageUrl == null ? 'Take a photo' : 'Take a new photo'),
+              subtitle: const Text('Pack on a table, front label filling the frame'),
+              onTap: () => Navigator.pop(c, 'camera'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Choose from gallery'),
+              onTap: () => Navigator.pop(c, 'gallery'),
+            ),
+            if (p.imageUrl != null)
+              ListTile(
+                leading: const Icon(Icons.hide_image_outlined),
+                title: const Text('Remove photo'),
+                onTap: () => Navigator.pop(c, 'remove'),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (choice == null || !mounted) return;
+    try {
+      if (choice == 'remove') {
+        await s.api.removeProductPhoto(s.hid, p.id);
+      } else {
+        final shot = await ImagePicker().pickImage(
+          source: choice == 'camera' ? ImageSource.camera : ImageSource.gallery,
+          maxWidth: 1600,
+          imageQuality: 88,
+        );
+        if (shot == null || !mounted) return;
+        await s.api.setProductPhoto(s.hid, p.id, await shot.readAsBytes());
+      }
+      s.changed();
+      _load();
+      if (mounted) toast(context, choice == 'remove' ? 'Photo removed' : 'Photo updated');
+    } on ApiException catch (e) {
+      if (mounted) toast(context, e.message, error: true);
+    }
+  }
+
   Future<void> _addBarcode() async {
     final s = Kasita.read(context);
     final code = await Navigator.of(context).push<String>(
@@ -186,7 +240,23 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         children: [
           Row(
             children: [
-              ProductThumb(p.imageUrl, size: 72),
+              GestureDetector(
+                onTap: _photo,
+                child: Stack(
+                  children: [
+                    ProductThumb(p.imageUrl, size: 72),
+                    Positioned(
+                      right: 2,
+                      bottom: 2,
+                      child: CircleAvatar(
+                        radius: 12,
+                        backgroundColor: t.colorScheme.primaryContainer,
+                        child: Icon(Icons.photo_camera, size: 14, color: t.colorScheme.onPrimaryContainer),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(

@@ -48,3 +48,22 @@ def test_identify_needs_login(client, jazz):
     _, hid = jazz
     assert client.post(f"/api/households/{hid}/products/identify",
                        files={"file": ("p.jpg", photo(), "image/jpeg")}).status_code == 401
+
+
+def test_retake_and_remove_product_photo(client, jazz, tmp_path, monkeypatch):
+    from app.config import settings
+    monkeypatch.setattr(settings, "upload_dir", str(tmp_path))
+    h, hid = jazz
+    base = f"/api/households/{hid}"
+    pid = client.post(f"{base}/products", json={"name": "Dove"}, headers=h).json()["id"]
+    first = client.post(f"{base}/products/{pid}/photo", headers=h, files={"file": ("a.jpg", photo(), "image/jpeg")}).json()
+    first_path = "/" + first["image_url"].split("/", 3)[3]
+    assert client.get(first_path).status_code == 200
+    second = client.post(f"{base}/products/{pid}/photo", headers=h, files={"file": ("b.jpg", photo(), "image/jpeg")}).json()
+    assert second["image_url"] != first["image_url"]
+    assert client.get(first_path).status_code == 404            # the old picture is gone from disk
+    gone = client.delete(f"{base}/products/{pid}/photo", headers=h).json()
+    assert gone["image_url"] is None
+    # an Open Food Facts picture is only a link: removing it deletes nothing
+    client.patch(f"{base}/products/{pid}", json={"image_url": "https://images.openfoodfacts.org/x.jpg"}, headers=h)
+    assert client.delete(f"{base}/products/{pid}/photo", headers=h).json()["image_url"] is None

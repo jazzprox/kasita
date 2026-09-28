@@ -260,6 +260,10 @@ class Api {
       _send('PUT', '${_h(hid)}/plan/$day', body: {'recipe_id': recipeId, 'note': note});
   Future<List<String>> planToShopping(String hid) async =>
       List<String>.from((await post('${_h(hid)}/plan/shopping') as Map)['added']);
+  Future<Product> setProductPhoto(String hid, String pid, Uint8List photo) async =>
+      Product.fromJson(await upload('${_h(hid)}/products/$pid/photo', [(photo, 'product.jpg')]));
+  Future<Product> removeProductPhoto(String hid, String pid) async =>
+      Product.fromJson(await delete('${_h(hid)}/products/$pid/photo'));
   Future<void> undoStock(String hid, List<String> eventIds) => post('${_h(hid)}/stock/undo', {'event_ids': eventIds});
   Future<Map<String, dynamic>> consume(String hid, String pid, double qty, {bool spoiled = false}) async =>
       Map<String, dynamic>.from(
