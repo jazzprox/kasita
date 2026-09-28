@@ -12,6 +12,7 @@ INSTRUCTIONS = """You suggest home-cooked meals from what a household has at hom
 Dutch, Latin and everyday international food). Reply with ONLY a JSON object:
 {"ideas": [{"title": string, "minutes": number, "uses": [string], "missing": [string], "steps": [string], "why": string}]}
 
+- Write titles, steps and "why" in English, even when pantry names are Spanish, Dutch or Papiamentu.
 - 4 ideas. Build them mostly from the pantry list; "uses" names pantry items exactly as listed.
 - Prefer items that expire soon (marked "expires in N days"); say so in "why" when an idea uses them.
 - "missing": at most 3 cheap, common extras worth buying; basics like salt, pepper, oil, water are assumed.
