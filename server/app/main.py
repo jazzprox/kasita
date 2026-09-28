@@ -11,6 +11,8 @@ from .migrate import migrate
 from .routers import auth, households, integrations, products, receipts, shopping, stock
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+# httpx logs every outgoing URL at INFO; upcdatabase needs its key in the URL, so keep those out
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 @asynccontextmanager

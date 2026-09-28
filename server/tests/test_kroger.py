@@ -53,3 +53,23 @@ def test_kroger_outage_is_incomplete_not_missing(kroger):
 def test_kroger_skipped_without_credentials(monkeypatch):
     monkeypatch.setattr(settings, "kroger_client_id", "")
     assert b._kroger(httpx.Client(), "049000028904") is None
+
+
+def test_upcdatabase_key_in_query_and_not_found(monkeypatch):
+    monkeypatch.setattr(settings, "upcdatabase_token", "k")
+    seen = []
+
+    def handler(req: httpx.Request):
+        seen.append(req.url.params.get("apikey"))
+        if req.url.path.endswith("/049000028904"):
+            return httpx.Response(200, json={"success": True, "title": "Coca-Cola", "brand": "Coca-Cola",
+                                             "category": "Food", "images": []})
+        if req.url.path.endswith("/000000000000"):
+            return httpx.Response(200, json={"success": False, "error": {"message": "Your API Key is invalid."}})
+        return httpx.Response(200, json={"success": False, "error": {"message": "Not Found. No product."}})
+
+    c = httpx.Client(transport=httpx.MockTransport(handler))
+    assert b._upcdatabase(c, "049000028904")["name"] == "Coca-Cola" and seen[0] == "k"
+    assert b._upcdatabase(c, "041224705272") is None            # a real "not found"
+    with pytest.raises(b.Incomplete):                            # a bad key is not "not found"
+        b._upcdatabase(c, "000000000000")

@@ -142,6 +142,44 @@ def _upcitemdb(client: httpx.Client, barcode: str) -> dict | None:
     }
 
 
+def _upcdatabase(client: httpx.Client, barcode: str) -> dict | None:
+    """Last fallback: upcdatabase.org free plan (100/day). Thin data (often just a brand-ish
+    title), so it is only asked when every other source came up empty."""
+    if not settings.upcdatabase_token:
+        return None
+    try:
+        # the key goes in the query string: their API rejects it as a Bearer header
+        r = client.get(f"https://api.upcdatabase.org/product/{barcode}",
+                       params={"apikey": settings.upcdatabase_token})
+    except httpx.HTTPError as e:
+        log.warning("barcode %s: upcdatabase unreachable (%s)", barcode, e)
+        raise Incomplete from e
+    if r.status_code == 429:
+        raise Incomplete
+    try:
+        d = r.json()
+    except ValueError:
+        raise Incomplete
+    if not d.get("success"):
+        msg = ((d.get("error") or {}).get("message") or "").lower()
+        if "not found" in msg:
+            return None
+        log.warning("barcode %s: upcdatabase error (%s)", barcode, msg[:80])
+        raise Incomplete
+    title = (d.get("title") or d.get("description") or "").strip()
+    if not title:
+        return None
+    images = d.get("images") or []
+    return {
+        "source": "upcdatabase",
+        "name": title[:255],
+        "brand": d.get("brand") or None,
+        "quantity_text": d.get("size") or None,
+        "image_url": images[0] if isinstance(images, list) and images else None,
+        "categories": d.get("category") or None,
+    }
+
+
 def fetch_remote(barcode: str, client: httpx.Client | None = None) -> dict | None:
     own = client is None
     client = client or httpx.Client(timeout=8, headers={"User-Agent": USER_AGENT}, follow_redirects=True)
@@ -163,7 +201,8 @@ def fetch_remote(barcode: str, client: httpx.Client | None = None) -> dict | Non
             hit = _parse(source, r.json())
             if hit:
                 return hit
-        for extra in (_kroger, _upcitemdb):  # Kroger first: it also spares UPCitemdb's 100/day
+        # Kroger first (spares UPCitemdb's 100/day); upcdatabase last (thin data, 100/day)
+        for extra in (_kroger, _upcitemdb, _upcdatabase):
             try:
                 hit = extra(client, barcode)
             except Incomplete:

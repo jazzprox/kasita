@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     # Empty = source skipped.
     kroger_client_id: str = ""
     kroger_client_secret: str = ""
+    # upcdatabase.org free plan (100 lookups/day): last fallback. Empty = skipped.
+    upcdatabase_token: str = ""
     # how long a barcode lookup result (found or not found) is trusted before asking again
     barcode_cache_days: int = 30
     upload_dir: str = "./uploads"

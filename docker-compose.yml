@@ -35,6 +35,7 @@ services:
       - KASITA_OFF_CONTACT=kasita.jazzproxy.com
       - KASITA_KROGER_CLIENT_ID=${KASITA_KROGER_CLIENT_ID:-}
       - KASITA_KROGER_CLIENT_SECRET=${KASITA_KROGER_CLIENT_SECRET:-}
+      - KASITA_UPCDATABASE_TOKEN=${KASITA_UPCDATABASE_TOKEN:-}
     volumes:
       - ./data/uploads:/data/uploads
     ports:
