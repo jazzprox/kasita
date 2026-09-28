@@ -39,6 +39,8 @@ services:
       - KASITA_NTFY_URL=${KASITA_NTFY_URL:-}
       - KASITA_NTFY_TOPIC=${KASITA_NTFY_TOPIC:-}
       - KASITA_NTFY_TOKEN=${KASITA_NTFY_TOKEN:-}
+      - KASITA_OFF_USER_ID=${KASITA_OFF_USER_ID:-}
+      - KASITA_OFF_PASSWORD=${KASITA_OFF_PASSWORD:-}
     volumes:
       - ./data/uploads:/data/uploads
     ports:
