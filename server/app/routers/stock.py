@@ -140,3 +140,24 @@ async def read_date(file: UploadFile = File(...), a: HouseholdAccess = Depends(h
         raise HTTPException(422, str(e)) from e
     except codex.CodexError as e:
         raise HTTPException(502, str(e)) from e
+
+
+
+@router.get("/month")
+def this_month(a: HouseholdAccess = Depends(household_access), db: Session = Depends(get_db)):
+    """This month's grocery spending against the household's budget."""
+    from ..services.digest import month_to_date
+    return month_to_date(db, a.household.id)
+
+
+@router.get("/price-changes")
+def price_changes(days: int = 30, a: HouseholdAccess = Depends(household_access), db: Session = Depends(get_db)):
+    from ..services.prices import price_changes as calc
+    return calc(db, a.household.id, days=max(1, min(days, 366)))
+
+
+@router.get("/activity")
+def activity(limit: int = 60, a: HouseholdAccess = Depends(household_access), db: Session = Depends(get_db)):
+    """Who did what: bought, used, opened, put on the list, scanned a receipt."""
+    from ..services.activity import feed
+    return feed(db, a.household.id, limit=max(1, min(limit, 200)))

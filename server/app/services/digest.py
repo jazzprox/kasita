@@ -51,10 +51,11 @@ def expiry_message(groups: dict[str, list[str]]) -> str | None:
     return "\n".join(parts)
 
 
-def spending(db: Session, household_id: str, days: int = 7, until: datetime | None = None) -> dict:
-    """What purchases with a price cost in the last `days` days, per category and per store."""
+def spending(db: Session, household_id: str, days: int = 7, until: datetime | None = None,
+             since: datetime | None = None) -> dict:
+    """What purchases with a price cost in the last `days` days (or from `since`), per category and store."""
     until = until or datetime.now(timezone.utc)
-    since = until - timedelta(days=days)
+    since = since or until - timedelta(days=days)
     rows = db.execute(
         select(StockEvent.quantity, StockEvent.unit_price, Product.category, Store.name)
         .join(Product, Product.id == StockEvent.product_id)
@@ -76,7 +77,7 @@ def spending(db: Session, household_id: str, days: int = 7, until: datetime | No
             "by_category": order(by_cat), "by_store": order(by_store), "purchases": len(rows)}
 
 
-def weekly_message(s: dict) -> str | None:
+def weekly_message(s: dict, rises: list[dict] | None = None) -> str | None:
     if not s["purchases"]:
         return None
     cur = s["currency"]
@@ -84,7 +85,38 @@ def weekly_message(s: dict) -> str | None:
     lines += [f"• {c['name']}: {c['amount']:.2f}" for c in s["by_category"][:6]]
     if len(s["by_store"]) > 1:
         lines.append("Stores: " + ", ".join(f"{x['name']} {x['amount']:.2f}" for x in s["by_store"][:4]))
+    if rises:
+        lines.append("Went up: " + "; ".join(f"{r['product']} {r['before']:.2f}→{r['now']:.2f} at {r['store']} (+{r['pct']}%)"
+                                               for r in rises[:5]))
     return "\n".join(lines)
+
+
+def month_to_date(db: Session, household_id: str, now: datetime | None = None) -> dict:
+    """This calendar month's priced grocery spending against the household's budget."""
+    now = now or datetime.now(timezone.utc)
+    start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    s = spending(db, household_id, since=start, until=now)
+    h = db.get(Household, household_id)
+    budget = h.grocery_budget if h else None
+    return {"month": now.strftime("%Y-%m"), "spent": s["total"], "budget": budget, "currency": s["currency"],
+            "pct": round(float(s["total"] / budget) * 100) if budget else None}
+
+
+def budget_alert(db: Session, household_id: str, now: datetime | None = None) -> str | None:
+    """The 80% / 100% message, once per threshold per month (remembered on the household)."""
+    m = month_to_date(db, household_id, now)
+    if not m["budget"] or m["pct"] is None:
+        return None
+    level = 100 if m["pct"] >= 100 else 80 if m["pct"] >= 80 else None
+    h = db.get(Household, household_id)
+    if level is None or (h.budget_alerted or "") >= f"{m['month']}:{level:03d}":
+        return None
+    h.budget_alerted = f"{m['month']}:{level:03d}"
+    db.commit()
+    cur = m["currency"]
+    if level == 100:
+        return f"Grocery budget used up: {cur} {m['spent']:.2f} of {m['budget']:.2f} this month."
+    return f"80% of the grocery budget used: {cur} {m['spent']:.2f} of {m['budget']:.2f} this month."
 
 
 def send(title: str, message: str, tags: str = "shopping_cart", priority: str = "default",

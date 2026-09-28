@@ -55,6 +55,8 @@ class HouseholdIn(BaseModel):
 class HouseholdPatch(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     currency: str | None = Field(default=None, min_length=3, max_length=3)
+    grocery_budget: Decimal | None = Field(default=None, ge=0)  # 0 clears it
+    ntfy_topic: str | None = Field(default=None, max_length=64, pattern=r"^[A-Za-z0-9_-]*$")  # "" clears it
 
 
 class HouseholdOut(ORM):
@@ -62,6 +64,8 @@ class HouseholdOut(ORM):
     name: str
     currency: str
     role: str | None = None
+    grocery_budget: Decimal | None = None
+    ntfy_topic: str | None = None
 
 
 class MemberOut(BaseModel):

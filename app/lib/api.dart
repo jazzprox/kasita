@@ -228,6 +228,20 @@ class Api {
   /// Photo of a printed date -> {"date": "YYYY-MM-DD" | null, "printed": text}.
   Future<Map<String, dynamic>> readDate(String hid, Uint8List photo) async =>
       Map<String, dynamic>.from(await upload('${_h(hid)}/stock/read-date', [(photo, 'date.jpg')]));
+  Future<List<Map<String, dynamic>>> shoppingByStore(String hid) async => [
+    for (final g in await get('${_h(hid)}/shopping/by-store') as List) Map<String, dynamic>.from(g),
+  ];
+  Future<Map<String, dynamic>> month(String hid) async =>
+      Map<String, dynamic>.from(await get('${_h(hid)}/stock/month'));
+  Future<List<Map<String, dynamic>>> priceChanges(String hid, int days) async => [
+    for (final x in await get('${_h(hid)}/stock/price-changes', {'days': '$days'}) as List)
+      Map<String, dynamic>.from(x),
+  ];
+  Future<List<Map<String, dynamic>>> activity(String hid) async => [
+    for (final x in await get('${_h(hid)}/stock/activity') as List) Map<String, dynamic>.from(x),
+  ];
+  Future<Household> updateHousehold(String hid, Map<String, dynamic> body) async =>
+      Household.fromJson(await patch('/api/households/$hid', body));
   Future<void> undoStock(String hid, List<String> eventIds) => post('${_h(hid)}/stock/undo', {'event_ids': eventIds});
   Future<Map<String, dynamic>> consume(String hid, String pid, double qty, {bool spoiled = false}) async =>
       Map<String, dynamic>.from(

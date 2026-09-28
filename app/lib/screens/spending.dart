@@ -15,6 +15,8 @@ class SpendingScreen extends StatefulWidget {
 class _SpendingScreenState extends State<SpendingScreen> {
   int _days = 30;
   Map<String, dynamic>? _s;
+  Map<String, dynamic>? _month;
+  List<Map<String, dynamic>> _rises = [];
 
   @override
   void initState() {
@@ -27,13 +29,105 @@ class _SpendingScreenState extends State<SpendingScreen> {
     setState(() => _s = null);
     try {
       final r = await s.api.spending(s.hid, _days);
-      if (mounted) setState(() => _s = r);
+      final m = await s.api.month(s.hid);
+      final rises = await s.api.priceChanges(s.hid, _days);
+      if (mounted) {
+        setState(() {
+          _s = r;
+          _month = m;
+          _rises = rises;
+        });
+      }
     } on ApiException catch (e) {
       if (mounted) toast(context, e.message, error: true);
     }
   }
 
   double _n(dynamic v) => double.tryParse('$v') ?? 0;
+
+  Future<void> _setBudget() async {
+    final s = Kasita.read(context);
+    final ctl = TextEditingController(text: _month?['budget'] == null ? '' : _n(_month!['budget']).toStringAsFixed(0));
+    final v = await showDialog<String>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Monthly grocery budget'),
+        content: TextField(
+          controller: ctl,
+          autofocus: true,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: InputDecoration(
+            prefixText: '${s.household!.currency} ',
+            helperText: 'Empty = no budget. Alerts at 80% and 100%.',
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(c, ctl.text.trim()), child: const Text('Save')),
+        ],
+      ),
+    );
+    if (v == null) return;
+    try {
+      await s.api.updateHousehold(s.hid, {'grocery_budget': double.tryParse(v.replaceAll(',', '.')) ?? 0});
+      await s.loadHouseholds();
+      _load();
+    } on ApiException catch (e) {
+      if (mounted) toast(context, e.message, error: true);
+    }
+  }
+
+  Widget _monthCard() {
+    final t = Theme.of(context);
+    final m = _month!;
+    final cur = m['currency'];
+    final spent = _n(m['spent']);
+    final budget = m['budget'] == null ? null : _n(m['budget']);
+    final owner = Kasita.read(context).household!.isOwner;
+    return Card(
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      child: InkWell(
+        onTap: owner ? _setBudget : null,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('This month', style: t.textTheme.labelLarge),
+              const SizedBox(height: 4),
+              Text(
+                budget == null
+                    ? '$cur ${spent.toStringAsFixed(2)}'
+                    : '$cur ${spent.toStringAsFixed(2)} of ${budget.toStringAsFixed(0)}',
+                style: t.textTheme.titleLarge,
+              ),
+              if (budget != null) ...[
+                const SizedBox(height: 8),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: budget == 0 ? 0 : (spent / budget).clamp(0, 1).toDouble(),
+                    minHeight: 10,
+                    color: spent >= budget
+                        ? t.colorScheme.error
+                        : (spent >= 0.8 * budget ? Colors.orange.shade700 : null),
+                  ),
+                ),
+              ],
+              if (owner)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    budget == null ? 'Tap to set a monthly budget' : 'Tap to change the budget',
+                    style: t.textTheme.bodySmall,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   Widget _bars(String title, List rows, String cur, double total) {
     final t = Theme.of(context);
@@ -95,6 +189,7 @@ class _SpendingScreenState extends State<SpendingScreen> {
               },
             ),
           ),
+          if (_month != null) _monthCard(),
           if (s == null)
             const Padding(
               padding: EdgeInsets.all(40),
@@ -117,6 +212,21 @@ class _SpendingScreenState extends State<SpendingScreen> {
             ),
             _bars('By category', s['by_category'] as List, s['currency'], _n(s['total'])),
             _bars('By store', s['by_store'] as List, s['currency'], _n(s['total'])),
+            if (_rises.isNotEmpty) ...[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 20, 16, 4),
+                child: Text('Went up', style: t.textTheme.titleMedium),
+              ),
+              for (final r in _rises)
+                ListTile(
+                  dense: true,
+                  leading: Icon(Icons.trending_up, color: Colors.orange.shade800),
+                  title: Text('${r['product']} at ${r['store']}'),
+                  trailing: Text(
+                    '${_n(r['before']).toStringAsFixed(2)} → ${_n(r['now']).toStringAsFixed(2)} (+${r['pct']}%)',
+                  ),
+                ),
+            ],
             const SizedBox(height: 24),
           ],
         ],

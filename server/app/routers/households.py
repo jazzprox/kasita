@@ -22,7 +22,8 @@ DEFAULT_LOCATIONS = [("Fridge", False), ("Freezer", True), ("Pantry", False)]
 @router.get("", response_model=list[HouseholdOut])
 def my_households(user: User = Depends(current_user), db: Session = Depends(get_db)):
     rows = db.scalars(select(Membership).where(Membership.user_id == user.id))
-    return [HouseholdOut(id=m.household.id, name=m.household.name, currency=m.household.currency, role=m.role) for m in rows]
+    return [HouseholdOut(id=m.household.id, name=m.household.name, currency=m.household.currency, role=m.role,
+                         grocery_budget=m.household.grocery_budget, ntfy_topic=m.household.ntfy_topic) for m in rows]
 
 
 @router.post("", response_model=HouseholdOut, status_code=201)
@@ -43,8 +44,15 @@ def update_household(body: HouseholdPatch, a: HouseholdAccess = Depends(househol
         a.household.name = body.name.strip()
     if body.currency:
         a.household.currency = body.currency.upper()
+    fields = body.model_dump(exclude_unset=True)
+    if "grocery_budget" in fields:
+        a.household.grocery_budget = fields["grocery_budget"] or None
+        a.household.budget_alerted = None  # a new budget may deserve a fresh alert
+    if "ntfy_topic" in fields:
+        a.household.ntfy_topic = fields["ntfy_topic"] or None
     db.commit()
-    return HouseholdOut(id=a.household.id, name=a.household.name, currency=a.household.currency, role=a.role)
+    return HouseholdOut(id=a.household.id, name=a.household.name, currency=a.household.currency, role=a.role,
+                        grocery_budget=a.household.grocery_budget, ntfy_topic=a.household.ntfy_topic)
 
 
 # --- members & invites ---------------------------------------------------------

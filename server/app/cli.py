@@ -51,12 +51,16 @@ def digest(kind: str, dry_run: bool) -> None:
             if kind == "expiry":
                 msg = dg.expiry_message(dg.expiring(db, h.id))
                 title, tags = f"{h.name}: use these soon", "hourglass_flowing_sand"
+            elif kind == "budget":
+                msg = dg.budget_alert(db, h.id)
+                title, tags = f"{h.name}: grocery budget", "money_with_wings"
             elif kind == "freezer":
                 old = dg.forgotten_in_freezer(db, h.id)
                 msg = ("In the freezer for a while:\n" + "\n".join(f"• {x}" for x in old)) if old else None
                 title, tags = f"{h.name}: freezer check", "snowflake"
             else:
-                msg = dg.weekly_message(dg.spending(db, h.id, days=7))
+                from .services.prices import price_changes
+                msg = dg.weekly_message(dg.spending(db, h.id, days=7), price_changes(db, h.id, days=7))
                 title, tags = f"{h.name}: groceries this week", "shopping_cart"
             if not msg:
                 print(f"{h.name}: nothing to send")
@@ -74,7 +78,7 @@ def main() -> None:
     c.add_argument("--name", required=True)
     c.add_argument("--household")
     d = sub.add_parser("digest", help="push the expiry or weekly digest to ntfy")
-    d.add_argument("kind", choices=["expiry", "weekly", "freezer"])
+    d.add_argument("kind", choices=["expiry", "weekly", "freezer", "budget"])
     d.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
     if args.cmd == "create-admin":

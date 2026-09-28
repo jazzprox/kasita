@@ -77,3 +77,11 @@ def refill(a: HouseholdAccess = Depends(household_access), db: Session = Depends
             added.append(item)
     db.commit()
     return added
+
+
+
+@router.get("/by-store")
+def by_store(a: HouseholdAccess = Depends(household_access), db: Session = Depends(get_db)):
+    """The open list split by the store where each item was cheapest last time (from receipt prices)."""
+    from ..services.prices import cheapest_split
+    return cheapest_split(db, a.household.id)

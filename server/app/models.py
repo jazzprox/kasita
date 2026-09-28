@@ -52,6 +52,8 @@ class Household(Base):
     currency: Mapped[str] = mapped_column(String(3), default="XCG")
     # ntfy topic for this household's digests (expiry, weekly, freezer). None = no digests.
     ntfy_topic: Mapped[str | None] = mapped_column(String(64))
+    grocery_budget: Mapped[Decimal | None] = mapped_column(Money)  # per calendar month; None = no budget
+    budget_alerted: Mapped[str | None] = mapped_column(String(16))  # last alert sent, e.g. "2026-10:80"
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     members: Mapped[list["Membership"]] = relationship(back_populates="household", cascade="all, delete-orphan")

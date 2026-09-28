@@ -9,12 +9,15 @@ String fmtQty(double q) =>
 
 class Household {
   final String id, name, currency;
-  final String? role;
+  final String? role, ntfyTopic;
+  final double? groceryBudget;
   Household.fromJson(Map<String, dynamic> j)
     : id = j['id'],
       name = j['name'],
       currency = j['currency'],
-      role = j['role'];
+      role = j['role'],
+      ntfyTopic = j['ntfy_topic'],
+      groceryBudget = _numOrNull(j['grocery_budget']);
   bool get isOwner => role == 'owner';
 }
 

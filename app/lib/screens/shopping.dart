@@ -19,6 +19,8 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
   List<ShoppingItem>? _items;
   int _seen = -1;
   bool _offline = false; // showing the list saved on the phone
+  bool _byStore = false; // group by the store where each item was cheapest last time
+  List<Map<String, dynamic>>? _stores;
   int _pending = 0; // changes waiting to be sent
   Timer? _retry;
 
@@ -72,6 +74,55 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
         });
       }
     }
+  }
+
+  Future<void> _loadStores() async {
+    final s = Kasita.read(context);
+    try {
+      final g = await s.api.shoppingByStore(s.hid);
+      if (mounted) setState(() => _stores = g);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _byStore = false);
+        toast(context, 'Store view needs a connection', error: true);
+      }
+    }
+  }
+
+  /// Open items grouped by cheapest store (headers carry the expected total).
+  List<Widget> _storeSections(List<ShoppingItem> open) {
+    final t = Theme.of(context);
+    final cur = Kasita.read(context).household!.currency;
+    final byId = {for (final i in open) i.id: i};
+    final shown = <String>{};
+    final out = <Widget>[];
+    for (final g in _stores ?? const <Map<String, dynamic>>[]) {
+      final items = [for (final x in g['items'] as List) byId[x['id']]].whereType<ShoppingItem>().toList();
+      if (items.isEmpty) continue;
+      shown.addAll(items.map((i) => i.id));
+      final total = double.tryParse('${g['total']}') ?? 0;
+      out.add(
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 2),
+          child: Text(
+            '${g['store']}${(g['priced'] ?? 0) > 0 ? ' · about $cur ${total.toStringAsFixed(2)}' : ''}',
+            style: t.textTheme.labelLarge?.copyWith(color: t.colorScheme.primary),
+          ),
+        ),
+      );
+      out.addAll(items.map(_tile));
+    }
+    final rest = open.where((i) => !shown.contains(i.id)).toList();
+    if (rest.isNotEmpty) {
+      out.add(
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 2),
+          child: Text('Just added', style: t.textTheme.labelLarge?.copyWith(color: t.colorScheme.primary)),
+        ),
+      );
+      out.addAll(rest.map(_tile));
+    }
+    return out;
   }
 
   /// Apply a change on screen and in the phone's copy, and queue it for the server.
@@ -286,17 +337,43 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
                     onRefresh: _load,
                     child: ListView(
                       children: [
-                        for (final (cat, items) in _groups(open)) ...[
+                        if (open.length > 1 && !_offline)
                           Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 14, 16, 2),
-                            child: Text(
-                              cat,
-                              style: Theme.of(context).textTheme.labelLarge
-                                  ?.copyWith(color: Theme.of(context).colorScheme.primary),
+                            padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                            child: SegmentedButton<bool>(
+                              segments: const [
+                                ButtonSegment(
+                                  value: false,
+                                  icon: Icon(Icons.category_outlined),
+                                  label: Text('By aisle'),
+                                ),
+                                ButtonSegment(
+                                  value: true,
+                                  icon: Icon(Icons.savings_outlined),
+                                  label: Text('Cheapest store'),
+                                ),
+                              ],
+                              selected: {_byStore},
+                              onSelectionChanged: (v) {
+                                setState(() => _byStore = v.first);
+                                if (_byStore) _loadStores();
+                              },
                             ),
                           ),
-                          for (final i in items) _tile(i),
-                        ],
+                        if (_byStore && !_offline)
+                          ..._storeSections(open)
+                        else
+                          for (final (cat, items) in _groups(open)) ...[
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 14, 16, 2),
+                              child: Text(
+                                cat,
+                                style: Theme.of(context).textTheme.labelLarge
+                                    ?.copyWith(color: Theme.of(context).colorScheme.primary),
+                              ),
+                            ),
+                            for (final i in items) _tile(i),
+                          ],
                         if (done.isNotEmpty) const Divider(),
                         for (final i in done) _tile(i),
                         const SizedBox(height: 80),
