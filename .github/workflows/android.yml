@@ -12,7 +12,28 @@ permissions:
   contents: write   # to create the release
 
 jobs:
+  # Until the signing secrets exist, skip the build (grey "skipped") instead
+  # of failing and emailing on every push.
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      has_keys: ${{ steps.keys.outputs.has_keys }}
+    steps:
+      - id: keys
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ] && [ -n "$KEYSTORE_PASSWORD" ]; then
+            echo "has_keys=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::KEYSTORE_BASE64 / KEYSTORE_PASSWORD not set yet, skipping the APK build"
+            echo "has_keys=false" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
+    needs: check
+    if: needs.check.outputs.has_keys == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
