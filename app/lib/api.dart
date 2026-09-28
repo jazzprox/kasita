@@ -138,11 +138,14 @@ class Api {
   }
 
   /// Multipart upload of one file under the form field `file`.
-  Future<dynamic> upload(String path, Uint8List bytes, String filename) async {
+  /// Multipart upload: every file goes under the form field `file` (several = parts, in order).
+  Future<dynamic> upload(String path, List<(Uint8List, String)> files) async {
     Future<http.Response> go() async {
       final req = http.MultipartRequest('POST', _u(path));
       if (_access != null) req.headers['Authorization'] = 'Bearer $_access';
-      req.files.add(http.MultipartFile.fromBytes('file', bytes, filename: filename));
+      for (final (bytes, name) in files) {
+        req.files.add(http.MultipartFile.fromBytes('file', bytes, filename: name));
+      }
       return http.Response.fromStream(await _http.send(req));
     }
 
@@ -229,8 +232,10 @@ class Api {
   Future<List<Receipt>> receipts(String hid) async =>
       (await get('${_h(hid)}/receipts') as List).map((e) => Receipt.fromJson(e)).toList();
   Future<Receipt> receipt(String hid, String id) async => Receipt.fromJson(await get('${_h(hid)}/receipts/$id'));
-  Future<Receipt> uploadReceipt(String hid, Uint8List photo, String filename) async =>
-      Receipt.fromJson(await upload('${_h(hid)}/receipts', photo, filename));
+
+  /// One photo, or the parts of a long receipt from top to bottom.
+  Future<Receipt> uploadReceipt(String hid, List<(Uint8List, String)> parts) async =>
+      Receipt.fromJson(await upload('${_h(hid)}/receipts', parts));
   Future<Uint8List> receiptImage(String hid, String id) => bytes('${_h(hid)}/receipts/$id/image');
   Future<Receipt> reparseReceipt(String hid, String id) async =>
       Receipt.fromJson(await post('${_h(hid)}/receipts/$id/parse'));

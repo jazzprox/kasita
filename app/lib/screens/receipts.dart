@@ -16,48 +16,120 @@ import 'securo.dart';
 final _money = NumberFormat('#,##0.00');
 String money(double? v) => v == null ? '—' : _money.format(v);
 
-/// Take or pick a receipt photo, upload it and open the review screen.
+/// Take or pick receipt photos, upload them and open the review screen.
+///
+/// A long receipt can be photographed in parts, top to bottom, each overlapping
+/// the last by a line or two; the server joins them into one strip. A phone
+/// panorama picked from the gallery works as one tall part.
 Future<void> scanReceipt(BuildContext context, {ImageSource? source}) async {
   final s = Kasita.read(context);
-  source ??= await showModalBottomSheet<ImageSource>(
-    context: context,
-    showDragHandle: true,
-    builder: (c) => SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ListTile(
-            leading: const Icon(Icons.photo_camera_outlined),
-            title: const Text('Take a photo'),
-            subtitle: const Text('Flat, well lit, the whole receipt in view'),
-            onTap: () => Navigator.pop(c, ImageSource.camera),
-          ),
-          ListTile(
-            leading: const Icon(Icons.photo_library_outlined),
-            title: const Text('Choose a photo'),
-            onTap: () => Navigator.pop(c, ImageSource.gallery),
-          ),
-        ],
-      ),
-    ),
-  );
-  if (source == null) return;
-  final XFile? file;
-  try {
-    file = await ImagePicker().pickImage(source: source, maxWidth: 2400, maxHeight: 2400, imageQuality: 88);
-  } catch (e) {
-    if (context.mounted) toast(context, 'Could not open the camera: $e', error: true);
-    return;
+  final parts = <(Uint8List, String)>[];
+  while (true) {
+    final src = parts.isEmpty ? source ?? await _pickSource(context) : await _nextStep(context, parts.length);
+    if (!context.mounted) return;
+    if (src == null) {
+      if (parts.isEmpty) return; // cancelled before taking anything
+      final discard = await showDialog<bool>(
+        context: context,
+        builder: (c) => AlertDialog(
+          title: Text('Discard ${parts.length == 1 ? 'this photo' : 'these ${parts.length} photos'}?'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Keep going')),
+            TextButton(onPressed: () => Navigator.pop(c, true), child: const Text('Discard')),
+          ],
+        ),
+      );
+      if (discard == true || !context.mounted) return;
+      continue;
+    }
+    if (src == _done) break;
+    final XFile? file;
+    try {
+      // limit only the width: a tall panorama must keep its height (the text stays readable)
+      file = await ImagePicker().pickImage(source: src as ImageSource, maxWidth: 2000, imageQuality: 88);
+    } catch (e) {
+      if (context.mounted) toast(context, 'Could not open the camera: $e', error: true);
+      return;
+    }
+    if (!context.mounted) return;
+    if (file == null) {
+      if (parts.isEmpty) return;
+      continue; // backed out of the camera: ask again what to do
+    }
+    parts.add((await file.readAsBytes(), file.name));
+    if (!context.mounted) return;
   }
-  if (file == null || !context.mounted) return;
   try {
-    final receipt = await s.api.uploadReceipt(s.hid, await file.readAsBytes(), file.name);
+    final receipt = await s.api.uploadReceipt(s.hid, parts);
     if (!context.mounted) return;
     await Navigator.of(context).push(MaterialPageRoute(builder: (_) => ReceiptReviewScreen(receiptId: receipt.id)));
   } on ApiException catch (e) {
     if (context.mounted) toast(context, e.message, error: true);
   }
 }
+
+const _done = 'done';
+
+Future<ImageSource?> _pickSource(BuildContext context) => showModalBottomSheet<ImageSource>(
+  context: context,
+  showDragHandle: true,
+  builder: (c) => SafeArea(
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ListTile(
+          leading: const Icon(Icons.photo_camera_outlined),
+          title: const Text('Take a photo'),
+          subtitle: const Text('Long receipt? Start with the top; you can add the rest in parts'),
+          onTap: () => Navigator.pop(c, ImageSource.camera),
+        ),
+        ListTile(
+          leading: const Icon(Icons.photo_library_outlined),
+          title: const Text('Choose a photo'),
+          subtitle: const Text('A panorama of a long receipt works too'),
+          onTap: () => Navigator.pop(c, ImageSource.gallery),
+        ),
+      ],
+    ),
+  ),
+);
+
+/// After each part: add another (camera or gallery), or read what we have.
+Future<Object?> _nextStep(BuildContext context, int count) => showModalBottomSheet<Object>(
+  context: context,
+  showDragHandle: true,
+  isDismissible: false,
+  builder: (c) => SafeArea(
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ListTile(
+          leading: CircleAvatar(child: Text('$count')),
+          title: Text(count == 1 ? 'Photo added' : '$count parts added'),
+          subtitle: const Text('More receipt below? Photograph the next part, overlapping the last by a line or two.'),
+        ),
+        ListTile(
+          leading: const Icon(Icons.add_a_photo_outlined),
+          title: const Text('Add next part'),
+          onTap: () => Navigator.pop(c, ImageSource.camera),
+        ),
+        ListTile(
+          leading: const Icon(Icons.photo_library_outlined),
+          title: const Text('Add next part from gallery'),
+          onTap: () => Navigator.pop(c, ImageSource.gallery),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          child: FilledButton.icon(
+            onPressed: () => Navigator.pop(c, _done),
+            icon: const Icon(Icons.check),
+            label: Text(count == 1 ? 'Done, read the receipt' : 'Done, read all $count parts'),
+          ),
+        ),
+      ],
+    ),
+  ),
+);
 
 class ReceiptsScreen extends StatefulWidget {
   const ReceiptsScreen({super.key});

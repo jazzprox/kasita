@@ -41,6 +41,7 @@ INSTRUCTIONS = """You read photos of shop receipts (mostly supermarkets in Cura√
 - Bag fees, bottle or crate deposits, service charges: kind "fee" or "deposit". Leave out subtotals, tax (OB) lines, payment method, change, loyalty points and cashier info.
 - "total": the amount paid for the whole receipt.
 - "currency": ISO code. NAf, ANG, Cg, XCG and "fl" all mean the Caribbean guilder: use "XCG". "$" or USD: "USD".
+- Check your work: the line totals should add up to the total paid. If they don't, look again for a missed or doubled line.
 - Numbers use a dot as decimal separator. Use null when something is not readable; never invent lines.
 - If the photo is not a receipt or cannot be read at all, reply {"error": "<short reason>"}."""
 
@@ -51,28 +52,91 @@ def receipts_dir(household_id: str) -> Path:
     return d
 
 
-def store_image(household_id: str, data: bytes) -> str:
-    """Normalise to an upright JPEG no longer than `receipt_max_px`; returns the path."""
+def _open(data: bytes) -> Image.Image:
     try:
-        img = Image.open(io.BytesIO(data))
-        img = ImageOps.exif_transpose(img).convert("RGB")
+        return ImageOps.exif_transpose(Image.open(io.BytesIO(data))).convert("RGB")
     except Exception as e:  # noqa: BLE001
         raise ValueError("That file is not an image Kasita can read") from e
-    img.thumbnail((settings.receipt_max_px, settings.receipt_max_px))
+
+
+def _tall(img: Image.Image) -> bool:
+    return img.height > img.width * 1.5
+
+
+def store_images(household_id: str, parts: list[bytes]) -> str:
+    """One receipt photo, or several parts of a long receipt taken top to bottom.
+
+    A normal photo is kept as before (longest side <= receipt_max_px). Parts and
+    tall panoramas keep their text size instead: every part is scaled to the same
+    width (<= receipt_strip_width) and they are stacked into one long strip, with
+    a dark bar where one photo ends and the next begins.
+    """
+    imgs = [_open(d) for d in parts]
+    if len(imgs) == 1 and not _tall(imgs[0]):
+        img = imgs[0]
+        img.thumbnail((settings.receipt_max_px, settings.receipt_max_px))
+    else:
+        width = min(settings.receipt_strip_width, min(i.width for i in imgs))
+        scaled = [i.resize((width, max(1, round(i.height * width / i.width)))) for i in imgs]
+        bar = 16
+        height = sum(i.height for i in scaled) + bar * (len(scaled) - 1)
+        if height > settings.receipt_strip_max_height:
+            raise ValueError("That receipt is too long for one scan: split it into two receipts")
+        img = Image.new("RGB", (width, height), (40, 40, 40))
+        y = 0
+        for i in scaled:
+            img.paste(i, (0, y))
+            y += i.height + bar
     path = receipts_dir(household_id) / f"{uuid.uuid4()}.jpg"
     img.save(path, "JPEG", quality=85, optimize=True)
     return str(path)
+
+
+def store_image(household_id: str, data: bytes) -> str:
+    return store_images(household_id, [data])
+
+
+def sections(jpeg: bytes, max_sections: int = 10) -> list[bytes]:
+    """A tall strip as overlapping sections the vision model can read at full size.
+
+    Vision models shrink big images to fit roughly 2048 px, which turns a long
+    strip's text to mush, so each section is about 1.3x as tall as wide, and
+    consecutive sections overlap by 15% so no line is cut in half unseen.
+    """
+    img = Image.open(io.BytesIO(jpeg))
+    w, h = img.size
+    if h <= w * 1.5:
+        return [jpeg]
+    tile = int(w * 1.3)
+    while True:
+        step = int(tile * 0.85)
+        count = 1 + max(0, -(-(h - tile) // step))
+        if count <= max_sections:
+            break
+        tile = int(tile * 1.25)
+    out = []
+    for n in range(count):
+        top = min(n * step, h - tile)
+        buf = io.BytesIO()
+        img.crop((0, top, w, top + tile)).save(buf, "JPEG", quality=88)
+        out.append(buf.getvalue())
+    return out
 
 
 def read_with_chatgpt(db: Session, household_id: str, jpeg: bytes) -> dict:
     """Ask the household's ChatGPT to read the receipt. Tests replace this function."""
     secret = chatgpt.fresh_secret(db, household_id)
     currency = _household_currency(db, household_id)
-    text = codex.respond(secret, chatgpt.model_for(db, household_id), INSTRUCTIONS, [
-        {"type": "input_text", "text": f"Read this receipt. If no currency is printed, assume {currency}."},
-        {"type": "input_image", "image_url": "data:image/jpeg;base64," + base64.b64encode(jpeg).decode(),
-         "detail": "high"},
-    ])
+    parts = sections(jpeg)
+    intro = f"Read this receipt. If no currency is printed, assume {currency}."
+    if len(parts) > 1:
+        intro += (f" It is long, so it comes as {len(parts)} overlapping sections, top to bottom. A line at the"
+                  " bottom of one section that shows again at the top of the next is the SAME line: list it once."
+                  " A dark bar marks where one photo ended and the next began; those photos overlap too.")
+    content = [{"type": "input_text", "text": intro}] + [
+        {"type": "input_image", "image_url": "data:image/jpeg;base64," + base64.b64encode(p).decode(),
+         "detail": "high"} for p in parts]
+    text = codex.respond(secret, chatgpt.model_for(db, household_id), INSTRUCTIONS, content)
     return extract_json(text)
 
 

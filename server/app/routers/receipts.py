@@ -17,6 +17,7 @@ from .stock import _check_ref
 router = APIRouter(prefix="/api/households/{household_id}/receipts", tags=["receipts"])
 
 MAX_UPLOAD = 20 * 1024 * 1024
+MAX_PARTS = 8
 
 
 def _get(db: Session, a: HouseholdAccess, receipt_id: str) -> Receipt:
@@ -59,14 +60,20 @@ def list_receipts(limit: int = 50, a: HouseholdAccess = Depends(household_access
 
 
 @router.post("", response_model=ReceiptOut, status_code=201)
-async def upload(background: BackgroundTasks, file: UploadFile = File(...),
+async def upload(background: BackgroundTasks, file: list[UploadFile] = File(...),
                  a: HouseholdAccess = Depends(household_access), db: Session = Depends(get_db)):
-    """Upload a photo; it is read in the background (poll GET until status is parsed or failed)."""
-    data = await file.read(MAX_UPLOAD + 1)
-    if len(data) > MAX_UPLOAD:
-        raise HTTPException(413, "Photo is larger than 20 MB")
+    """Upload a photo, or several `file` parts of a long receipt in order (top first). It is read in
+    the background: poll GET until status is parsed or failed."""
+    if len(file) > MAX_PARTS:
+        raise HTTPException(413, f"At most {MAX_PARTS} photos per receipt")
+    parts = []
+    for f in file:
+        data = await f.read(MAX_UPLOAD + 1)
+        if len(data) > MAX_UPLOAD:
+            raise HTTPException(413, "A photo is larger than 20 MB")
+        parts.append(data)
     try:
-        path = svc.store_image(a.household.id, data)
+        path = svc.store_images(a.household.id, parts)
     except ValueError as e:
         raise HTTPException(422, str(e)) from e
     r = Receipt(household_id=a.household.id, image_path=path, status="new", uploaded_by=a.user.id,

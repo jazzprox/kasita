@@ -175,3 +175,56 @@ def test_migrations_match_models(tmp_path, monkeypatch):
     migrate.migrate()
     with eng.connect() as conn:
         assert compare_metadata(MigrationContext.configure(conn), Base.metadata) == []
+
+
+def jpeg(w, h, color="white"):
+    buf = io.BytesIO()
+    Image.new("RGB", (w, h), color).save(buf, "JPEG")
+    return buf.getvalue()
+
+
+def test_long_receipt_in_parts_becomes_one_strip(client, jazz, ai):
+    h, hid = jazz
+    files = [("file", ("top.jpg", jpeg(900, 1200), "image/jpeg")),
+             ("file", ("bottom.jpg", jpeg(1000, 1300, "gray"), "image/jpeg"))]
+    r = client.post(f"/api/households/{hid}/receipts", headers=h, files=files)
+    assert r.status_code == 201, r.text
+    img = Image.open(io.BytesIO(client.get(f"/api/households/{hid}/receipts/{r.json()['id']}/image", headers=h).content))
+    # both parts at the narrower width, stacked with a 16 px bar between them
+    assert img.width == 900 and img.height == 1200 + round(1300 * 900 / 1000) + 16
+    assert client.get(f"/api/households/{hid}/receipts/{r.json()['id']}", headers=h).json()["status"] == "parsed"
+
+
+def test_panorama_keeps_width_and_is_read_in_overlapping_sections():
+    import app.services.receipts as svc
+    import tempfile
+    from app.config import settings
+    settings.upload_dir = tempfile.mkdtemp()
+    path = svc.store_image("hh", jpeg(1000, 6000))
+    strip = open(path, "rb").read()
+    assert Image.open(io.BytesIO(strip)).size == (1000, 6000)  # not shrunk to 400 x 2400
+    parts = [Image.open(io.BytesIO(p)) for p in svc.sections(strip)]
+    assert len(parts) == 6 and all(p.size == (1000, 1300) for p in parts)
+    # a normal photo stays one image, and a very tall one still fits in 10 sections
+    assert len(svc.sections(jpeg(1500, 2000))) == 1
+    assert len(svc.sections(jpeg(500, 19000))) <= 10
+
+
+def test_sections_are_explained_to_the_model(client, jazz, monkeypatch):
+    import app.services.receipts as svc
+    from app.services import chatgpt, codex
+    seen = {}
+    monkeypatch.setattr(chatgpt, "fresh_secret", lambda db, hid: object())
+    monkeypatch.setattr(chatgpt, "model_for", lambda db, hid: "m")
+
+    def fake_respond(secret, model, instructions, content, **kw):
+        seen["content"] = content
+        return '{"store": "X", "lines": []}'
+
+    monkeypatch.setattr(codex, "respond", fake_respond)
+    h, hid = jazz
+    from app.db import SessionLocal
+    with SessionLocal() as db:
+        svc.read_with_chatgpt(db, hid, jpeg(1000, 6000))
+    images = [c for c in seen["content"] if c["type"] == "input_image"]
+    assert len(images) == 6 and "SAME line" in seen["content"][0]["text"]
