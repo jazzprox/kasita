@@ -277,6 +277,21 @@ def confirm(db: Session, receipt: Receipt, user_id: str | None, *, create_missin
             db.flush()
         receipt.store_id = store.id
     added, created, skipped = 0, 0, 0
+    # What THIS receipt has already created, keyed the way aliases are keyed.
+    #
+    # A shop rings two of the same thing up as two lines of quantity 1, not
+    # one line of quantity 2 — a real receipt here printed PINEAPPLE CHUNKS
+    # twice (at 8.62 and 7.89) and CERES TROPICAL BLAST 1LT twice. Aliases are
+    # matched when the receipt is PARSED and only written by `remember()` at
+    # the end of this loop, so the second line could never see what the first
+    # one had just made, and each pair became two separate products with the
+    # same name. Every later feature then treats them as different things:
+    # stock is split, the shopping list offers both, and a barcode can only be
+    # attached to one of them (they are unique per household).
+    #
+    # The quantities still land on the one product, because `purchase()` is
+    # called per line either way.
+    made: dict[str, Product] = {}
     for line in receipt.lines:
         if line.skip:
             skipped += 1
@@ -286,14 +301,22 @@ def confirm(db: Session, receipt: Receipt, user_id: str | None, *, create_missin
             if not create_missing:
                 skipped += 1
                 continue
-            weighed = line.quantity != line.quantity.to_integral_value()
-            name = (line.name or line.raw_text.title())[:255]
-            product = Product(household_id=hid, name=name, unit="kg" if weighed else "pcs",
-                              category=categories.guess(name))
-            db.add(product)
-            db.flush()
-            line.product_id = product.id
-            created += 1
+            key = text_key(line.name or line.raw_text)
+            product = made.get(key) if key else None
+            if product is not None:
+                # A second line of something this receipt already created.
+                line.product_id = product.id
+            else:
+                weighed = line.quantity != line.quantity.to_integral_value()
+                name = (line.name or line.raw_text.title())[:255]
+                product = Product(household_id=hid, name=name, unit="kg" if weighed else "pcs",
+                                  category=categories.guess(name))
+                db.add(product)
+                db.flush()
+                line.product_id = product.id
+                if key:
+                    made[key] = product
+                created += 1
         unit_price = line.unit_price
         if unit_price is None and line.line_total is not None:
             unit_price = (line.line_total / line.quantity).quantize(Decimal("0.01"))

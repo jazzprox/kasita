@@ -228,3 +228,52 @@ def test_sections_are_explained_to_the_model(client, jazz, monkeypatch):
         svc.read_with_chatgpt(db, hid, jpeg(1000, 6000))
     images = [c for c in seen["content"] if c["type"] == "input_image"]
     assert len(images) == 6 and "SAME line" in seen["content"][0]["text"]
+
+
+def test_two_lines_of_the_same_thing_make_one_product(client, jazz, ai):
+    """A shop rings two of the same item up as two lines, not one line of two.
+
+    A real receipt printed PINEAPPLE CHUNKS twice (at different prices, 8.62
+    and 7.89) and made two products with the same name. Aliases are matched
+    when a receipt is PARSED and only written after it is confirmed, so the
+    second line could never see what the first had just created. Everything
+    downstream then treats the pair as different things: stock is split, the
+    shopping list offers both, and a barcode — unique per household — can
+    only be attached to one of them.
+    """
+    h, hid = jazz
+    rid = upload(client, h, hid)
+    base = f"/api/households/{hid}/receipts/{rid}/lines"
+    lines = client.get(f"/api/households/{hid}/receipts/{rid}", headers=h).json()["lines"]
+    for ln in lines:  # start from a clean receipt, then add the pair
+        client.delete(f"{base}/{ln['id']}", headers=h)
+    client.post(base, headers=h, json={"raw_text": "PINEAPPLE CHUNKS", "quantity": 1, "line_total": 8.62})
+    client.post(base, headers=h, json={"raw_text": "PINEAPPLE CHUNKS", "quantity": 1, "line_total": 7.89})
+
+    c = client.post(f"/api/households/{hid}/receipts/{rid}/confirm", headers=h, json={}).json()
+    assert c["added"] == 2, "both lines are still booked"
+    assert c["created_products"] == 1, "but they share ONE product"
+
+    named = [p for p in client.get(f"/api/households/{hid}/products", headers=h).json()
+             if p["name"].lower() == "pineapple chunks"]
+    assert len(named) == 1
+
+    # Both quantities land on it, and both prices are kept.
+    stock = {s["product"]["name"]: Decimal(s["total"])
+             for s in client.get(f"/api/households/{hid}/stock", headers=h).json()}
+    assert stock["Pineapple Chunks"] == 2
+    prices = client.get(f"/api/households/{hid}/products/{named[0]['id']}/prices", headers=h).json()
+    assert sorted(Decimal(p["unit_price"]) for p in prices) == [Decimal("7.89"), Decimal("8.62")]
+
+
+def test_different_names_still_make_different_products(client, jazz, ai):
+    """The guard keys on the text, so it must not merge things that differ."""
+    h, hid = jazz
+    rid = upload(client, h, hid)
+    base = f"/api/households/{hid}/receipts/{rid}/lines"
+    for ln in client.get(f"/api/households/{hid}/receipts/{rid}", headers=h).json()["lines"]:
+        client.delete(f"{base}/{ln['id']}", headers=h)
+    client.post(base, headers=h, json={"raw_text": "PINEAPPLE CHUNKS", "quantity": 1, "line_total": 8.62})
+    client.post(base, headers=h, json={"raw_text": "PINEAPPLE RINGS", "quantity": 1, "line_total": 7.89})
+    c = client.post(f"/api/households/{hid}/receipts/{rid}/confirm", headers=h, json={}).json()
+    assert c["created_products"] == 2
