@@ -30,12 +30,14 @@ INSTRUCTIONS = """You read photos of household utility bills (mostly Curaçao: A
 {"biller": "Aqualectra", "account": "customer or account number or null", "period": "September 2026 or null",
  "bill_date": "YYYY-MM-DD or null", "due_date": "YYYY-MM-DD or null", "currency": "XCG",
  "lines": [{"service": "water", "amount": 50.98}, {"service": "electricity", "amount": 250.00}],
- "total": 300.98}
+ "total": 300.98, "card_total": null}
 Rules:
 - "total" is the amount due / te betalen / total a pagar on this bill, including any previous balance.
 - "lines" split that total by service, in plain lowercase English words (water, electricity, garbage, internet, tv, phone, previous balance, late fee). One bill that combines water and electricity MUST be split into both. Taxes and fixed charges belong to the service they are printed under; if they cannot be placed, give them their own line. The lines must add up to the total.
 - Amounts are plain numbers with a dot for decimals. Guilder (NAf, ANG, Cg, XCG) is "XCG"; US dollars is "USD".
 - Dates on Curaçao bills are day-month-year.
+- The photos may be payment receipts instead of bills, e.g. Pagafasil / Western Union / kiosk slips that say "Transakshon eksitoso", and several of them can come in one upload. Then each receipt is one paid bill: add one line per receipt, the service taken from who was paid (Selikor = garbage, Flow / UTS / Digicel = internet or phone, Aqualectra = water unless it says electricity, Pagatinu / a prepaid token / kWh = electricity), "total" is the sum of those lines, and "biller" names who was paid, joined with ", " when there are several (e.g. "Selikor, Flow, Aqualectra").
+- A card terminal slip (bank logo, "Purchase" / "Sale", masked card number, Auth code, AID, "Cardholder copy") is how the bills were paid, NOT a bill: never make it a line and never add it to the total. Put its amount in "card_total" instead (null when there is none).
 - If something is not printed, use null. Never guess numbers.
 - Before replying, check your work: add up the lines and compare with the total.
 """
@@ -50,7 +52,7 @@ def bills_dir(household_id: str) -> Path:
 def read_with_chatgpt(db: Session, household_id: str, jpeg: bytes) -> dict:
     """Ask the household's ChatGPT to read the bill. Tests replace this function."""
     secret = chatgpt.fresh_secret(db, household_id)
-    parts = sections(jpeg, max_sections=6)
+    parts = sections(jpeg)
     intro = f"Read this bill. If no currency is printed, assume {_household_currency(db, household_id)}."
     if len(parts) > 1:
         intro += f" It comes as {len(parts)} overlapping sections (or pages), top to bottom; count nothing twice."

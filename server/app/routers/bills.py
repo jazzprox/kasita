@@ -18,7 +18,7 @@ from ..services.receipts import store_images
 router = APIRouter(prefix="/api/households/{household_id}/bills", tags=["bills"])
 
 MAX_UPLOAD = 20 * 1024 * 1024
-MAX_PAGES = 4
+MAX_PAGES = 8
 
 
 def _get(db: Session, a: HouseholdAccess, bill_id: str) -> Bill:

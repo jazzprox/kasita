@@ -462,17 +462,19 @@ Future<List<(Uint8List, String)>?> _capture(BuildContext context) async {
             if (pages.isNotEmpty)
               ListTile(
                 leading: CircleAvatar(child: Text('${pages.length}')),
-                title: Text(pages.length == 1 ? 'Page 1 added' : '${pages.length} pages added'),
-                subtitle: const Text('Does the bill have another page with amounts on it?'),
+                title: Text(pages.length == 1 ? '1 photo added' : '${pages.length} photos added'),
+                subtitle: const Text(
+                  'Another page, or another receipt paid at the same time? Add it here. The card slip may be included; it is not counted twice.',
+                ),
               ),
             ListTile(
               leading: const Icon(Icons.photo_camera_outlined),
-              title: Text(pages.isEmpty ? 'Take a photo' : 'Photograph the next page'),
+              title: Text(pages.isEmpty ? 'Take a photo' : 'Add another photo'),
               onTap: () => Navigator.pop(c, ImageSource.camera),
             ),
             ListTile(
               leading: const Icon(Icons.photo_library_outlined),
-              title: Text(pages.isEmpty ? 'Choose a photo or screenshot' : 'Next page from the gallery'),
+              title: Text(pages.isEmpty ? 'Choose a photo or screenshot' : 'Another photo from the gallery'),
               onTap: () => Navigator.pop(c, ImageSource.gallery),
             ),
             if (pages.isNotEmpty)
@@ -481,7 +483,7 @@ Future<List<(Uint8List, String)>?> _capture(BuildContext context) async {
                 child: FilledButton.icon(
                   onPressed: () => Navigator.pop(c, 'done'),
                   icon: const Icon(Icons.check),
-                  label: const Text('Done, read the bill'),
+                  label: const Text('Done, read it'),
                 ),
               ),
           ],
@@ -503,7 +505,7 @@ Future<List<(Uint8List, String)>?> _capture(BuildContext context) async {
       continue;
     }
     pages.add((await file.readAsBytes(), file.name));
-    if (pages.length >= 4 || !context.mounted) return pages;
+    if (pages.length >= 8 || !context.mounted) return pages;
   }
 }
 
