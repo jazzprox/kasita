@@ -240,3 +240,49 @@ class SecuroPayment {
       score = j['score'] ?? 0,
       attachmentCount = j['attachment_count'] ?? 0;
 }
+
+class BillLine {
+  final String service;
+  final double amount;
+  const BillLine(this.service, this.amount);
+  BillLine.fromJson(Map<String, dynamic> j) : service = j['service'] ?? '', amount = _num(j['amount']);
+  Map<String, dynamic> toJson() => {'service': service, 'amount': amount.toStringAsFixed(2)};
+}
+
+/// A utility bill (water, electricity, internet...) photographed to book its payment in Securo.
+class Bill {
+  final String id, status;
+  final String? error, biller, currency, period, accountRef, securoTransactionId;
+  final List<BillLine> lines;
+  final double? total;
+  final DateTime? billDate, dueDate;
+  final DateTime createdAt;
+  Bill.fromJson(Map<String, dynamic> j)
+    : id = j['id'],
+      status = j['status'],
+      error = j['error'],
+      biller = j['biller'],
+      currency = j['currency'],
+      period = j['period'],
+      accountRef = j['account_ref'],
+      securoTransactionId = j['securo_transaction_id'],
+      lines = [for (final l in j['lines'] as List? ?? const []) BillLine.fromJson(Map<String, dynamic>.from(l))],
+      total = _numOrNull(j['total']),
+      billDate = _date(j['bill_date']),
+      dueDate = _date(j['due_date']),
+      createdAt = _date(j['created_at']) ?? DateTime.now();
+  bool get reading => status == 'reading';
+  bool get booked => securoTransactionId != null;
+  bool get ready => !booked && !reading && total != null;
+  String get services => lines.map((l) => l.service).join(', ');
+}
+
+class SecuroAccount {
+  final String id, name;
+  final String? type, currency;
+  SecuroAccount.fromJson(Map<String, dynamic> j)
+    : id = j['id'],
+      name = j['name'],
+      type = j['type'],
+      currency = j['currency'];
+}

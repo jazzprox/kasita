@@ -330,3 +330,27 @@ class MealPlan(Base):
     day: Mapped[date] = mapped_column(Date)
     recipe_id: Mapped[str | None] = mapped_column(ForeignKey("recipes.id", ondelete="SET NULL"))
     note: Mapped[str | None] = mapped_column(String(160))  # "leftovers", "eating out"...
+
+
+
+class Bill(Base):
+    """A household bill (water, electricity, internet...) photographed in Kasita and booked in Securo.
+    Not part of the pantry: it only reads the bill and links it to the payment in the finance app."""
+    __tablename__ = "bills"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    household_id: Mapped[str] = mapped_column(ForeignKey("households.id", ondelete="CASCADE"), index=True)
+    status: Mapped[str] = mapped_column(String(12), default="reading")  # reading | read | linked | failed
+    error: Mapped[str | None] = mapped_column(Text)
+    biller: Mapped[str | None] = mapped_column(String(120))            # Aqualectra, Flow, Selikor...
+    lines: Mapped[list] = mapped_column(JSON, default=list)             # [{"service": "water", "amount": "50.98"}]
+    total: Mapped[Decimal | None] = mapped_column(Money)                # amount due on this bill
+    currency: Mapped[str | None] = mapped_column(String(3))
+    period: Mapped[str | None] = mapped_column(String(60))              # "September 2026"
+    bill_date: Mapped[date | None] = mapped_column(Date)
+    due_date: Mapped[date | None] = mapped_column(Date)
+    account_ref: Mapped[str | None] = mapped_column(String(60))         # customer / account number
+    image_path: Mapped[str | None] = mapped_column(Text)
+    raw: Mapped[dict | None] = mapped_column(JSON)
+    securo_transaction_id: Mapped[str | None] = mapped_column(String(64))
+    uploaded_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

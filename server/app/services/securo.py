@@ -173,3 +173,27 @@ def link(conn: Conn, transaction_id: str, *, photo: bytes | None, photo_name: st
     if note:
         notes = f"{existing_notes} • {note}" if existing_notes else note
         _request(conn, "PATCH", f"/api/transactions/{transaction_id}", json={"notes": notes[:1000]})
+
+
+def transaction(conn: Conn, transaction_id: str) -> dict:
+    return _request(conn, "GET", f"/api/transactions/{transaction_id}").json()
+
+
+def accounts(conn: Conn) -> list[dict]:
+    r = _request(conn, "GET", "/api/accounts").json()
+    rows = r.get("items", []) if isinstance(r, dict) else r
+    return [a for a in rows if not a.get("is_closed")]
+
+
+def category_id(conn: Conn, name: str) -> str | None:
+    r = _request(conn, "GET", "/api/categories").json()
+    rows = r.get("items", []) if isinstance(r, dict) else r
+    return next((c["id"] for c in rows if (c.get("name") or "").strip().lower() == name.lower()), None)
+
+
+def set_category(conn: Conn, transaction_id: str, category: str) -> None:
+    _request(conn, "PATCH", f"/api/transactions/{transaction_id}", json={"category_id": category})
+
+
+def create_transaction(conn: Conn, payload: dict) -> dict:
+    return _request(conn, "POST", "/api/transactions", json=payload).json()

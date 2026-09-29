@@ -63,7 +63,7 @@ def _tall(img: Image.Image) -> bool:
     return img.height > img.width * 1.5
 
 
-def store_images(household_id: str, parts: list[bytes]) -> str:
+def store_images(household_id: str, parts: list[bytes], folder: Path | None = None) -> str:
     """One receipt photo, or several parts of a long receipt taken top to bottom.
 
     A normal photo is kept as before (longest side <= receipt_max_px). Parts and
@@ -87,7 +87,7 @@ def store_images(household_id: str, parts: list[bytes]) -> str:
         for i in scaled:
             img.paste(i, (0, y))
             y += i.height + bar
-    path = receipts_dir(household_id) / f"{uuid.uuid4()}.jpg"
+    path = (folder or receipts_dir(household_id)) / f"{uuid.uuid4()}.jpg"
     img.save(path, "JPEG", quality=85, optimize=True)
     return str(path)
 

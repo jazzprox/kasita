@@ -6,6 +6,7 @@ import '../main.dart';
 import '../models.dart';
 import '../widgets.dart';
 import 'activity.dart';
+import 'bills.dart';
 import 'chatgpt.dart';
 import 'receipts.dart';
 import 'recipes.dart';
@@ -130,6 +131,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: const Text('Receipts'),
             subtitle: const Text('Photograph a receipt to fill the pantry with prices'),
             onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ReceiptsScreen())),
+          ),
+          ListTile(
+            leading: const Icon(Icons.bolt_outlined),
+            title: const Text('Bills'),
+            subtitle: const Text('Photograph utility bills and book them in Securo'),
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BillsScreen())),
           ),
           ListTile(
             leading: const Icon(Icons.menu_book_outlined),

@@ -314,6 +314,62 @@ class Api {
       Map<String, dynamic>.from(await post('${_h(hid)}/receipts/$id/confirm', {'location_id': locationId}));
   Future<void> deleteReceipt(String hid, String id) => delete('${_h(hid)}/receipts/$id');
 
+  // --- bills (utilities, booked in Securo) -----------------------------------
+  Future<List<Bill>> bills(String hid) async =>
+      (await get('${_h(hid)}/bills') as List).map((e) => Bill.fromJson(e)).toList();
+  Future<Bill> bill(String hid, String id) async => Bill.fromJson(await get('${_h(hid)}/bills/$id'));
+
+  /// One bill: a photo, or its pages in order.
+  Future<Bill> uploadBill(String hid, List<(Uint8List, String)> pages) async =>
+      Bill.fromJson(await upload('${_h(hid)}/bills', pages));
+  Future<Uint8List> billImage(String hid, String id) => bytes('${_h(hid)}/bills/$id/image');
+  Future<Bill> updateBill(String hid, String id, Map<String, dynamic> body) async =>
+      Bill.fromJson(await patch('${_h(hid)}/bills/$id', body));
+  Future<Bill> reparseBill(String hid, String id) async => Bill.fromJson(await post('${_h(hid)}/bills/$id/parse'));
+  Future<void> deleteBill(String hid, String id) => delete('${_h(hid)}/bills/$id');
+  Future<Bill> unlinkBill(String hid, String id) async =>
+      Bill.fromJson(await delete('${_h(hid)}/bills/$id/securo-link'));
+  Future<List<SecuroPayment>> billPayments(String hid, List<String> ids) async =>
+      (await post('${_h(hid)}/bills/payment-candidates', {'bill_ids': ids}) as List)
+          .map((e) => SecuroPayment.fromJson(e))
+          .toList();
+  Future<List<SecuroAccount>> securoAccounts(String hid) async =>
+      (await get('${_h(hid)}/bills/securo-accounts') as List).map((e) => SecuroAccount.fromJson(e)).toList();
+
+  /// Book the bills on an existing payment. Returns the note written and anything skipped.
+  Future<Map<String, dynamic>> linkBills(
+    String hid,
+    List<String> ids,
+    String txId, {
+    bool photos = true,
+    bool category = true,
+    bool note = true,
+  }) async => Map<String, dynamic>.from(
+    await post('${_h(hid)}/bills/link', {
+      'bill_ids': ids,
+      'transaction_id': txId,
+      'attach_photos': photos,
+      'set_category': category,
+      'add_note': note,
+    }),
+  );
+
+  /// No payment in Securo yet (cash, or it never came in): create it there.
+  Future<Map<String, dynamic>> recordBills(
+    String hid,
+    List<String> ids,
+    String accountId,
+    DateTime date, {
+    String? description,
+  }) async => Map<String, dynamic>.from(
+    await post('${_h(hid)}/bills/record', {
+      'bill_ids': ids,
+      'account_id': accountId,
+      'date': date.toIso8601String().substring(0, 10),
+      if (description != null && description.isNotEmpty) 'description': description,
+    }),
+  );
+
   // --- ChatGPT (reads receipts) --------------------------------------------
   String _gpt(String hid) => '${_h(hid)}/integrations/chatgpt';
   Future<ChatGPTStatus> chatgpt(String hid) async => ChatGPTStatus.fromJson(await get(_gpt(hid)));

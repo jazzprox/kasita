@@ -404,5 +404,68 @@ class SecuroLinkIn(BaseModel):
     add_note: bool = True
 
 
+class BillLine(BaseModel):
+    service: str = Field(min_length=1, max_length=40)
+    amount: Decimal
+
+
+class BillOut(BaseModel):
+    id: str
+    status: str  # reading | read | linked | failed
+    error: str | None
+    biller: str | None
+    lines: list[BillLine]
+    total: Decimal | None
+    currency: str | None
+    period: str | None
+    bill_date: date | None
+    due_date: date | None
+    account_ref: str | None
+    securo_transaction_id: str | None
+    created_at: datetime
+
+
+class BillPatch(BaseModel):
+    biller: str | None = Field(default=None, max_length=120)
+    lines: list[BillLine] | None = None
+    total: Decimal | None = Field(default=None, ge=0)
+    currency: str | None = Field(default=None, min_length=3, max_length=3)
+    period: str | None = Field(default=None, max_length=60)
+    bill_date: date | None = None
+    due_date: date | None = None
+    account_ref: str | None = Field(default=None, max_length=60)
+
+
+class BillsIn(BaseModel):
+    bill_ids: list[str] = Field(min_length=1, max_length=20)
+
+
+class BillsLinkIn(BillsIn):
+    transaction_id: str = Field(min_length=1, max_length=64)
+    attach_photos: bool = True
+    set_category: bool = True
+    add_note: bool = True
+
+
+class BillsRecordIn(BillsIn):
+    account_id: str = Field(min_length=1, max_length=64)
+    date: date
+    description: str | None = Field(default=None, max_length=200)
+
+
+class BillsBooked(BaseModel):
+    transaction_id: str
+    note: str
+    skipped: list[str] = []
+    bills: list[BillOut]
+
+
+class SecuroAccount(BaseModel):
+    id: str
+    name: str
+    type: str | None = None
+    currency: str | None = None
+
+
 class CookIn(BaseModel):
     note: str | None = Field(default=None, max_length=200)
