@@ -63,6 +63,81 @@ class _BillsScreenState extends State<BillsScreen> {
   double get _selectedTotal => _selection.fold(0, (n, b) => n + (b.total ?? 0));
 
   Future<void> _add() async {
+    final how = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (c) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.add_a_photo_outlined),
+              title: const Text('Photograph it'),
+              subtitle: const Text('The bill, or the payment receipts; several in one go is fine'),
+              onTap: () => Navigator.pop(c, 'photo'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.edit_outlined),
+              title: const Text('Type it in'),
+              subtitle: const Text('No paper: who you paid and how much'),
+              onTap: () => Navigator.pop(c, 'hand'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (how == 'photo') await _addPhoto();
+    if (how == 'hand') await _addByHand();
+  }
+
+  Future<void> _addByHand() async {
+    final s = Kasita.read(context);
+    final biller = TextEditingController();
+    final amount = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Add a bill'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: biller,
+              autofocus: true,
+              decoration: const InputDecoration(labelText: 'Who you paid', hintText: 'Aqualectra, Flow…'),
+            ),
+            TextField(
+              controller: amount,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(labelText: 'Amount'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Add')),
+        ],
+      ),
+    );
+    final value = double.tryParse(amount.text.trim().replaceAll(',', '.'));
+    if (ok != true || !mounted) return;
+    if (value == null) {
+      toast(context, 'The amount is not a number', error: true);
+      return;
+    }
+    try {
+      final b = await s.api.addBillByHand(s.hid, {
+        if (biller.text.trim().isNotEmpty) 'biller': biller.text.trim(),
+        'total': value.toStringAsFixed(2),
+      });
+      if (mounted) await _open(b); // services, dates and so on, if wanted
+    } on ApiException catch (e) {
+      if (mounted) toast(context, e.message, error: true);
+    }
+  }
+
+  Future<void> _addPhoto() async {
     final s = Kasita.read(context);
     final pages = await _capture(context);
     if (pages == null || !mounted) return;
@@ -83,7 +158,30 @@ class _BillsScreenState extends State<BillsScreen> {
           ],
         ),
       );
-      if (again == true && mounted) await _add();
+      if (again == true && mounted) await _addPhoto();
+    } on ApiException catch (e) {
+      if (mounted) toast(context, e.message, error: true);
+    }
+  }
+
+  Future<void> _rowAction(Bill b, String action) async {
+    final s = Kasita.read(context);
+    try {
+      switch (action) {
+        case 'edit':
+          await _open(b);
+          return;
+        case 'retake':
+          if (await retakeBill(context, b) == null) return;
+        case 'reread':
+          await s.api.reparseBill(s.hid, b.id);
+        case 'unlink':
+          await s.api.unlinkBill(s.hid, b.id);
+        case 'delete':
+          if (!await deleteBill(context, b)) return;
+      }
+      _picked.remove(b.id);
+      if (mounted) await _load();
     } on ApiException catch (e) {
       if (mounted) toast(context, e.message, error: true);
     }
@@ -333,11 +431,7 @@ class _BillsScreenState extends State<BillsScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Bills')),
       floatingActionButton: _picked.isEmpty
-          ? FloatingActionButton.extended(
-              onPressed: _add,
-              icon: const Icon(Icons.add_a_photo_outlined),
-              label: const Text('Photograph a bill'),
-            )
+          ? FloatingActionButton.extended(onPressed: _add, icon: const Icon(Icons.add), label: const Text('Add bill'))
           : null,
       bottomNavigationBar: _picked.isEmpty
           ? null
@@ -428,7 +522,7 @@ class _BillsScreenState extends State<BillsScreen> {
             if (b.period != null) b.period!,
             if (b.dueDate != null && !b.booked) 'due ${dateFmt.format(b.dueDate!)}',
           ].join(' · ');
-    return ListTile(
+    final tile = ListTile(
       leading: b.booked
           ? Icon(Icons.check_circle, color: t.colorScheme.primary)
           : b.reading
@@ -442,9 +536,99 @@ class _BillsScreenState extends State<BillsScreen> {
         subtitle.isEmpty ? dateFmtYear.format(b.billDate ?? b.createdAt) : subtitle,
         style: b.status == 'failed' ? TextStyle(color: t.colorScheme.error) : null,
       ),
-      trailing: Text(b.total == null ? '' : '${b.currency ?? ''} ${money(b.total)}'),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(b.total == null ? '' : '${b.currency ?? ''} ${money(b.total)}'),
+          PopupMenuButton<String>(
+            tooltip: 'Edit, retake, delete',
+            onSelected: (v) => _rowAction(b, v),
+            itemBuilder: (_) => billActions(b),
+          ),
+        ],
+      ),
+      contentPadding: const EdgeInsets.only(left: 16, right: 4),
       onTap: () => _open(b),
     );
+    return Dismissible(
+      key: ValueKey(b.id),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        color: t.colorScheme.errorContainer,
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 24),
+        child: Icon(Icons.delete_outline, color: t.colorScheme.onErrorContainer),
+      ),
+      confirmDismiss: (_) => deleteBill(context, b),
+      onDismissed: (_) => setState(() {
+        _picked.remove(b.id);
+        _bills?.removeWhere((x) => x.id == b.id);
+      }),
+      child: tile,
+    );
+  }
+}
+
+/// The same actions everywhere a bill shows: the list row menu and the bill screen.
+List<PopupMenuEntry<String>> billActions(Bill b, {bool edit = true}) => [
+  if (edit)
+    const PopupMenuItem(
+      value: 'edit',
+      child: ListTile(leading: Icon(Icons.edit_outlined), title: Text('Edit')),
+    ),
+  if (!b.booked)
+    PopupMenuItem(
+      value: 'retake',
+      child: ListTile(
+        leading: const Icon(Icons.add_a_photo_outlined),
+        title: Text(b.hasPhoto ? 'Retake photos' : 'Add photos'),
+      ),
+    ),
+  if (!b.booked && b.hasPhoto && !b.reading)
+    const PopupMenuItem(
+      value: 'reread',
+      child: ListTile(leading: Icon(Icons.refresh), title: Text('Read again')),
+    ),
+  if (b.booked)
+    const PopupMenuItem(
+      value: 'unlink',
+      child: ListTile(leading: Icon(Icons.link_off), title: Text('Unlink from Securo')),
+    ),
+  const PopupMenuItem(
+    value: 'delete',
+    child: ListTile(leading: Icon(Icons.delete_outline), title: Text('Delete')),
+  ),
+];
+
+/// Start over: new photos replace the old ones and ChatGPT reads the bill from scratch.
+Future<Bill?> retakeBill(BuildContext context, Bill b) async {
+  final s = Kasita.read(context);
+  final pages = await _capture(context);
+  if (pages == null || pages.isEmpty || !context.mounted) return null;
+  return s.api.replaceBillPhotos(s.hid, b.id, pages);
+}
+
+/// Asks first; true when it is gone.
+Future<bool> deleteBill(BuildContext context, Bill b) async {
+  final s = Kasita.read(context);
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (c) => AlertDialog(
+      title: Text('Delete ${b.biller ?? 'this bill'}?'),
+      content: Text(b.booked ? 'Only from Kasita: what was booked in Securo stays there.' : 'The photos go too.'),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
+        TextButton(onPressed: () => Navigator.pop(c, true), child: const Text('Delete')),
+      ],
+    ),
+  );
+  if (ok != true || !context.mounted) return false;
+  try {
+    await s.api.deleteBill(s.hid, b.id);
+    return true;
+  } on ApiException catch (e) {
+    if (context.mounted) toast(context, e.message, error: true);
+    return false;
   }
 }
 
@@ -635,8 +819,18 @@ class _BillScreenState extends State<BillScreen> {
 
   Future<void> _menu(String action) async {
     final s = Kasita.read(context);
+    final b = _b;
+    if (b == null) return;
     try {
       switch (action) {
+        case 'retake':
+          final fresh = await retakeBill(context, b);
+          if (fresh == null || !mounted) return;
+          _fill(fresh);
+          setState(() => _photo = null);
+          _poll = Timer(const Duration(seconds: 2), _load);
+          final p = await s.api.billImage(s.hid, widget.billId);
+          if (mounted) setState(() => _photo = p);
         case 'reread':
           _fill(await s.api.reparseBill(s.hid, widget.billId));
           _poll = Timer(const Duration(seconds: 2), _load);
@@ -644,22 +838,7 @@ class _BillScreenState extends State<BillScreen> {
           _fill(await s.api.unlinkBill(s.hid, widget.billId));
           if (mounted) toast(context, 'Unlinked here. The photo and note stay in Securo.');
         case 'delete':
-          final ok = await showDialog<bool>(
-            context: context,
-            builder: (c) => AlertDialog(
-              title: const Text('Delete this bill?'),
-              content: Text(
-                _b?.booked == true ? 'Only from Kasita: what was booked in Securo stays there.' : 'The photo goes too.',
-              ),
-              actions: [
-                TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
-                TextButton(onPressed: () => Navigator.pop(c, true), child: const Text('Delete')),
-              ],
-            ),
-          );
-          if (ok != true) return;
-          await s.api.deleteBill(s.hid, widget.billId);
-          if (mounted) Navigator.pop(context);
+          if (await deleteBill(context, b) && mounted) Navigator.pop(context);
       }
     } on ApiException catch (e) {
       if (mounted) toast(context, e.message, error: true);
@@ -677,15 +856,7 @@ class _BillScreenState extends State<BillScreen> {
       appBar: AppBar(
         title: Text(b?.biller ?? 'Bill'),
         actions: [
-          if (b != null)
-            PopupMenuButton<String>(
-              onSelected: _menu,
-              itemBuilder: (_) => [
-                if (!b.booked) const PopupMenuItem(value: 'reread', child: Text('Read the photo again')),
-                if (b.booked) const PopupMenuItem(value: 'unlink', child: Text('Unlink from Securo')),
-                const PopupMenuItem(value: 'delete', child: Text('Delete')),
-              ],
-            ),
+          if (b != null) PopupMenuButton<String>(onSelected: _menu, itemBuilder: (_) => billActions(b, edit: false)),
         ],
       ),
       floatingActionButton: _dirty
@@ -816,6 +987,36 @@ class _BillScreenState extends State<BillScreen> {
                   leading: const Icon(Icons.event_busy_outlined),
                   title: Text(_dueDate == null ? 'Due date' : 'Due ${dateFmtYear.format(_dueDate!)}'),
                   onTap: () => _pickDate(true),
+                ),
+                const Divider(height: 32),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    if (!b.booked)
+                      OutlinedButton.icon(
+                        onPressed: () => _menu('retake'),
+                        icon: const Icon(Icons.add_a_photo_outlined),
+                        label: Text(b.hasPhoto ? 'Retake photos' : 'Add photos'),
+                      ),
+                    if (!b.booked && b.hasPhoto && !b.reading)
+                      OutlinedButton.icon(
+                        onPressed: () => _menu('reread'),
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Read again'),
+                      ),
+                    if (b.booked)
+                      OutlinedButton.icon(
+                        onPressed: () => _menu('unlink'),
+                        icon: const Icon(Icons.link_off),
+                        label: const Text('Unlink from Securo'),
+                      ),
+                    OutlinedButton.icon(
+                      onPressed: () => _menu('delete'),
+                      icon: Icon(Icons.delete_outline, color: t.colorScheme.error),
+                      label: Text('Delete', style: TextStyle(color: t.colorScheme.error)),
+                    ),
+                  ],
                 ),
               ],
             ),

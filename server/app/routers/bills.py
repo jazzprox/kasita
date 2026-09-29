@@ -39,11 +39,38 @@ def _many(db: Session, a: HouseholdAccess, ids: list[str]) -> list[Bill]:
 def bill_out(b: Bill) -> BillOut:
     return BillOut(id=b.id, status=b.status, error=b.error, biller=b.biller, lines=b.lines or [], total=b.total,
                    currency=b.currency, period=b.period, bill_date=b.bill_date, due_date=b.due_date,
-                   account_ref=b.account_ref, securo_transaction_id=b.securo_transaction_id, created_at=b.created_at)
+                   account_ref=b.account_ref, securo_transaction_id=b.securo_transaction_id, created_at=b.created_at,
+                   has_photo=bool(b.image_path))
 
 
 def _securo_error(e: securo.SecuroError) -> HTTPException:
     return HTTPException(502, str(e))
+
+
+async def _store(file: list[UploadFile], a: HouseholdAccess) -> str:
+    if len(file) > MAX_PAGES:
+        raise HTTPException(413, f"At most {MAX_PAGES} photos per bill")
+    parts = []
+    for f in file:
+        data = await f.read(MAX_UPLOAD + 1)
+        if len(data) > MAX_UPLOAD:
+            raise HTTPException(413, "A photo is larger than 20 MB")
+        parts.append(data)
+    try:
+        return store_images(a.household.id, parts, folder=svc.bills_dir(a.household.id))
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+
+
+def _apply(b: Bill, body: BillPatch) -> None:
+    data = body.model_dump(exclude_unset=True)
+    if "lines" in data:
+        data["lines"] = [{"service": ln["service"].strip().lower(), "amount": f"{ln['amount']:.2f}"}
+                         for ln in data["lines"] or []]
+    if data.get("currency"):
+        data["currency"] = data["currency"].upper()
+    for k, v in data.items():
+        setattr(b, k, v)
 
 
 @router.get("", response_model=list[BillOut])
@@ -58,23 +85,25 @@ async def upload(background: BackgroundTasks, file: list[UploadFile] = File(...)
                  a: HouseholdAccess = Depends(household_access), db: Session = Depends(get_db)):
     """One bill: a photo, or its pages as several `file` parts in order. Read in the background:
     poll GET until status is read or failed."""
-    if len(file) > MAX_PAGES:
-        raise HTTPException(413, f"At most {MAX_PAGES} pages per bill")
-    parts = []
-    for f in file:
-        data = await f.read(MAX_UPLOAD + 1)
-        if len(data) > MAX_UPLOAD:
-            raise HTTPException(413, "A photo is larger than 20 MB")
-        parts.append(data)
-    try:
-        path = store_images(a.household.id, parts, folder=svc.bills_dir(a.household.id))
-    except ValueError as e:
-        raise HTTPException(422, str(e)) from e
+    path = await _store(file, a)
     b = Bill(household_id=a.household.id, image_path=path, status="reading", uploaded_by=a.user.id,
              currency=a.household.currency, lines=[])
     db.add(b)
     db.commit()
     background.add_task(svc.parse, b.id)
+    return bill_out(b)
+
+
+@router.post("/manual", response_model=BillOut, status_code=201)
+def add_by_hand(body: BillPatch, a: HouseholdAccess = Depends(household_access), db: Session = Depends(get_db)):
+    """A bill without a photo (paid online, the paper is gone): typed in."""
+    if body.total is None:
+        raise HTTPException(422, "The amount is needed")
+    b = Bill(household_id=a.household.id, status="read", uploaded_by=a.user.id, currency=a.household.currency,
+             lines=[])
+    _apply(b, body)
+    db.add(b)
+    db.commit()
     return bill_out(b)
 
 
@@ -158,17 +187,26 @@ def image(bill_id: str, a: HouseholdAccess = Depends(household_access), db: Sess
 def patch(bill_id: str, body: BillPatch, a: HouseholdAccess = Depends(household_access),
           db: Session = Depends(get_db)):
     b = _get(db, a, bill_id)
-    data = body.model_dump(exclude_unset=True)
-    if "lines" in data:
-        data["lines"] = [{"service": ln["service"].strip().lower(), "amount": f"{ln['amount']:.2f}"}
-                         for ln in data["lines"] or []]
-    if data.get("currency"):
-        data["currency"] = data["currency"].upper()
-    for k, v in data.items():
-        setattr(b, k, v)
+    _apply(b, body)
     if b.status in ("reading", "failed") and b.total is not None:
         b.status, b.error = "read", None  # typed in by hand
     db.commit()
+    return bill_out(b)
+
+
+@router.put("/{bill_id}/photos", response_model=BillOut)
+async def replace_photos(bill_id: str, background: BackgroundTasks, file: list[UploadFile] = File(...),
+                         a: HouseholdAccess = Depends(household_access), db: Session = Depends(get_db)):
+    """Start over with new photos: the old ones go, and the bill is read again from scratch."""
+    b = _get(db, a, bill_id)
+    if b.securo_transaction_id:
+        raise HTTPException(409, "This bill is already booked in Securo; unlink it first")
+    path = await _store(file, a)
+    if b.image_path:
+        Path(b.image_path).unlink(missing_ok=True)
+    b.image_path, b.status, b.error, b.lines, b.total, b.raw = path, "reading", None, [], None, None
+    db.commit()
+    background.add_task(svc.parse, b.id)
     return bill_out(b)
 
 
@@ -177,7 +215,9 @@ def reparse(bill_id: str, background: BackgroundTasks, a: HouseholdAccess = Depe
             db: Session = Depends(get_db)):
     b = _get(db, a, bill_id)
     if b.securo_transaction_id:
-        raise HTTPException(409, "This bill is already booked in Securo")
+        raise HTTPException(409, "This bill is already booked in Securo; unlink it first")
+    if not b.image_path:
+        raise HTTPException(409, "This bill has no photo to read")
     b.status, b.error = "reading", None
     db.commit()
     background.add_task(svc.parse, b.id)

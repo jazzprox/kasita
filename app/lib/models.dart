@@ -270,7 +270,9 @@ class Bill {
       total = _numOrNull(j['total']),
       billDate = _date(j['bill_date']),
       dueDate = _date(j['due_date']),
-      createdAt = _date(j['created_at']) ?? DateTime.now();
+      createdAt = _date(j['created_at']) ?? DateTime.now(),
+      hasPhoto = j['has_photo'] ?? true;
+  final bool hasPhoto;
   bool get reading => status == 'reading';
   bool get booked => securoTransactionId != null;
   bool get ready => !booked && !reading && total != null;

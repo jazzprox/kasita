@@ -142,3 +142,25 @@ def test_other_households_bills_are_hidden(client, jazz, ai):
     make_user("other@example.com", "another-long-password", "Other")
     h2 = login(client, "other@example.com", "another-long-password")
     assert client.get(f"/api/households/{hid}/bills/{bid}", headers=h2).status_code in (403, 404)
+
+
+def test_retake_photos_starts_over_and_delete(client, jazz, ai):
+    h, hid = jazz
+    b = upload(client, h, hid, ai, "aqua")
+    ai.append("flow")
+    r = client.put(f"/api/households/{hid}/bills/{b['id']}/photos", headers=h,
+                   files=[("file", ("a.jpg", photo(), "image/jpeg")), ("file", ("b.jpg", photo(), "image/jpeg"))])
+    assert r.status_code == 200 and r.json()["status"] == "reading"
+    again = client.get(f"/api/households/{hid}/bills/{b['id']}", headers=h).json()
+    assert again["biller"] == "Flow" and Decimal(again["total"]) == 119
+    assert client.delete(f"/api/households/{hid}/bills/{b['id']}", headers=h).status_code == 204
+    assert client.get(f"/api/households/{hid}/bills", headers=h).json() == []
+
+
+def test_bill_typed_in_by_hand(client, jazz):
+    h, hid = jazz
+    assert client.post(f"/api/households/{hid}/bills/manual", headers=h, json={"biller": "Flow"}).status_code == 422
+    b = client.post(f"/api/households/{hid}/bills/manual", headers=h,
+                    json={"biller": "Flow", "total": 119, "lines": [{"service": "Internet", "amount": 119}]}).json()
+    assert b["status"] == "read" and not b["has_photo"] and b["lines"] == [{"service": "internet", "amount": "119.00"}]
+    assert client.post(f"/api/households/{hid}/bills/{b['id']}/parse", headers=h).status_code == 409

@@ -139,9 +139,9 @@ class Api {
 
   /// Multipart upload of one file under the form field `file`.
   /// Multipart upload: every file goes under the form field `file` (several = parts, in order).
-  Future<dynamic> upload(String path, List<(Uint8List, String)> files) async {
+  Future<dynamic> upload(String path, List<(Uint8List, String)> files, {String method = 'POST'}) async {
     Future<http.Response> go() async {
-      final req = http.MultipartRequest('POST', _u(path));
+      final req = http.MultipartRequest(method, _u(path));
       if (_access != null) req.headers['Authorization'] = 'Bearer $_access';
       for (final (bytes, name) in files) {
         req.files.add(http.MultipartFile.fromBytes('file', bytes, filename: name));
@@ -322,6 +322,14 @@ class Api {
   /// One bill: a photo, or its pages in order.
   Future<Bill> uploadBill(String hid, List<(Uint8List, String)> pages) async =>
       Bill.fromJson(await upload('${_h(hid)}/bills', pages));
+
+  /// Start over: new photos replace the old ones and the bill is read again.
+  Future<Bill> replaceBillPhotos(String hid, String id, List<(Uint8List, String)> pages) async =>
+      Bill.fromJson(await upload('${_h(hid)}/bills/$id/photos', pages, method: 'PUT'));
+
+  /// A bill without a photo, typed in.
+  Future<Bill> addBillByHand(String hid, Map<String, dynamic> body) async =>
+      Bill.fromJson(await post('${_h(hid)}/bills/manual', body));
   Future<Uint8List> billImage(String hid, String id) => bytes('${_h(hid)}/bills/$id/image');
   Future<Bill> updateBill(String hid, String id, Map<String, dynamic> body) async =>
       Bill.fromJson(await patch('${_h(hid)}/bills/$id', body));

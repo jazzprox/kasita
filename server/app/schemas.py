@@ -423,6 +423,7 @@ class BillOut(BaseModel):
     account_ref: str | None
     securo_transaction_id: str | None
     created_at: datetime
+    has_photo: bool = False
 
 
 class BillPatch(BaseModel):
