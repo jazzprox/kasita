@@ -38,6 +38,12 @@ class Settings(BaseSettings):
     receipt_strip_width: int = 1400
     receipt_strip_max_height: int = 20000
     chatgpt_models: str = "gpt-5.6-sol,gpt-5.6,gpt-5.5,gpt-5.4,gpt-5.4-mini"
+    # store map: OpenStreetMap's Nominatim finds stores from their address (max 1 request/second,
+    # results cached). Empty URL = no geocoding; pins can still be placed by hand.
+    nominatim_url: str = "https://nominatim.openstreetmap.org"
+    nominatim_user_agent: str = "Kasita (self-hosted) jazzprox@github"
+    nominatim_country: str = "cw"
+    geocode_retry_days: int = 30  # a search that found nothing is tried again after this long
     # Flutter web build to serve at /, if present
     web_dir: str = "./web"
 

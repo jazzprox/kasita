@@ -151,6 +151,16 @@ class Store(Base):
     location_source: Mapped[str | None] = mapped_column(String(12))  # manual | geocoded
 
 
+class GeocodeCache(Base):
+    """What Nominatim answered for a search (found or not), so the same address is asked once."""
+    __tablename__ = "geocode_cache"
+    query: Mapped[str] = mapped_column(String(400), primary_key=True)
+    lat: Mapped[float | None]
+    lon: Mapped[float | None]
+    label: Mapped[str | None] = mapped_column(String(400))  # Nominatim's display_name
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 class Product(Base):
     __tablename__ = "products"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)

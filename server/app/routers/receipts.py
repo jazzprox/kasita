@@ -257,8 +257,8 @@ def delete_line(receipt_id: str, line_id: str, a: HouseholdAccess = Depends(hous
 
 
 @router.post("/{receipt_id}/confirm", response_model=ConfirmOut)
-def confirm(receipt_id: str, body: ConfirmIn | None = None, a: HouseholdAccess = Depends(household_access),
-            db: Session = Depends(get_db)):
+def confirm(receipt_id: str, background: BackgroundTasks, body: ConfirmIn | None = None,
+            a: HouseholdAccess = Depends(household_access), db: Session = Depends(get_db)):
     """Add the reviewed lines to stock with their prices, and learn the receipt names."""
     body = body or ConfirmIn()
     r = _get(db, a, receipt_id)
@@ -268,6 +268,10 @@ def confirm(receipt_id: str, body: ConfirmIn | None = None, a: HouseholdAccess =
     _check_ref(db, Location, body.location_id, a.household.id, "Location")
     result = svc.confirm(db, r, a.user.id, create_missing=body.create_missing, location_id=body.location_id)
     db.commit()
+    store = db.get(Store, r.store_id) if r.store_id else None
+    if store is not None and store.address and store.lat is None and store.location_source != "manual":
+        from ..services.geocode import geocode_store_id
+        background.add_task(geocode_store_id, store.id)  # put it on the map (Nominatim, cached)
     return result
 
 

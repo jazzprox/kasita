@@ -15,7 +15,7 @@ from app.db import Base, SessionLocal, engine  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models import User  # noqa: E402
 from app.security import hash_password  # noqa: E402
-from app.services import barcodes  # noqa: E402
+from app.services import barcodes, geocode  # noqa: E402
 
 FAKE_DB = {
     "5449000000996": {"source": "openfoodfacts", "name": "Coca-Cola", "brand": "Coca-Cola",
@@ -34,6 +34,7 @@ def fresh_db(monkeypatch):
         return FAKE_DB.get(code)
 
     monkeypatch.setattr(barcodes, "fetch_remote", fake_fetch)
+    monkeypatch.setattr(geocode, "nominatim_search", lambda params: [])  # never ask OpenStreetMap
     yield calls
 
 

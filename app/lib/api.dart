@@ -189,6 +189,17 @@ class Api {
   Future<Store> updateStore(String hid, String id, Map<String, dynamic> body) async =>
       Store.fromJson(await patch('${_h(hid)}/stores/$id', body));
 
+  /// Every store with its pin (lat/lon or null) and visits / spending there.
+  Future<List<Map<String, dynamic>>> storeMap(String hid) async => [
+    for (final x in await get('${_h(hid)}/stores/map') as List) Map<String, dynamic>.from(x),
+  ];
+  Future<Map<String, dynamic>> storeSummary(String hid, String id) async =>
+      Map<String, dynamic>.from(await get('${_h(hid)}/stores/$id/summary'));
+
+  /// Look the store up on OpenStreetMap now (address, then name).
+  Future<Store> geocodeStore(String hid, String id) async =>
+      Store.fromJson(await post('${_h(hid)}/stores/$id/geocode'));
+
   Future<List<StockProduct>> stock(String hid) async =>
       (await get('${_h(hid)}/stock') as List).map((e) => StockProduct.fromJson(e)).toList();
   Future<List<Product>> products(String hid, {String? q}) async =>

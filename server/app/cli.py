@@ -3,6 +3,10 @@
     python -m app.cli create-admin --email you@example.com --name "Jazz" [--household "Jazz"]
 
 Prints a generated password once. Everyone else joins through household invites.
+
+    python -m app.cli geocode-stores [--redo]
+
+Puts stores on the map from their address (OpenStreetMap Nominatim).
 """
 import argparse
 import secrets
@@ -70,6 +74,14 @@ def digest(kind: str, dry_run: bool) -> None:
                 dg.send(title, msg, tags, topic=h.ntfy_topic)
 
 
+def geocode_stores(redo: bool) -> None:
+    """Put stores on the map from their address or name (OpenStreetMap Nominatim, 1 request/second)."""
+    from .services.geocode import geocode_all
+    with SessionLocal() as db:
+        for name, result in geocode_all(db, redo=redo):
+            print(f"{name}: {result}")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(prog="kasita")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -80,11 +92,15 @@ def main() -> None:
     d = sub.add_parser("digest", help="push the expiry or weekly digest to ntfy")
     d.add_argument("kind", choices=["expiry", "weekly", "freezer", "budget"])
     d.add_argument("--dry-run", action="store_true")
+    g = sub.add_parser("geocode-stores", help="find stores without a location on the map (Nominatim)")
+    g.add_argument("--redo", action="store_true", help="also look up stores found before (never hand-placed ones)")
     args = ap.parse_args()
     if args.cmd == "create-admin":
         create_admin(args.email, args.name, args.household)
     elif args.cmd == "digest":
         digest(args.kind, args.dry_run)
+    elif args.cmd == "geocode-stores":
+        geocode_stores(args.redo)
 
 
 if __name__ == "__main__":
