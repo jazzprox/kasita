@@ -234,6 +234,11 @@ class Api {
   Future<List<Map<String, dynamic>>> shoppingByStore(String hid) async => [
     for (final g in await get('${_h(hid)}/shopping/by-store') as List) Map<String, dynamic>.from(g),
   ];
+
+  /// Per open item: latest price per store, cheapest and usual store, and a "cheaper at..." hint.
+  Future<List<Map<String, dynamic>>> shoppingPrices(String hid) async => [
+    for (final x in await get('${_h(hid)}/shopping/prices') as List) Map<String, dynamic>.from(x),
+  ];
   Future<Map<String, dynamic>> month(String hid) async =>
       Map<String, dynamic>.from(await get('${_h(hid)}/stock/month'));
   Future<List<Map<String, dynamic>>> priceChanges(String hid, int days) async => [

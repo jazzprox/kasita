@@ -28,7 +28,7 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
 
   static const _sorts = [
     ('aisle', 'By aisle'),
-    ('store', 'Cheapest store'),
+    ('store', 'By cheapest store'),
     ('name', 'Name A–Z'),
     ('newest', 'Newest first'),
     ('oldest', 'Oldest first'),
@@ -92,6 +92,7 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
   }
 
   List<Map<String, dynamic>>? _stores;
+  Map<String, String> _hints = {}; // item id -> "1.20 cheaper at Mangusa (last 5.95 vs 7.15)"
   int _pending = 0; // changes waiting to be sent
   Timer? _retry;
 
@@ -134,6 +135,8 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
           _pending = pending;
         });
       }
+      _loadHints();
+      if (_byStore) _loadStores();
     } catch (e) {
       if (!OfflineShopping.isOffline(e)) {
         if (mounted) toast(context, '$e', error: true);
@@ -149,6 +152,21 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
         });
       }
     }
+  }
+
+  /// "Cheaper elsewhere" hints; quietly nothing when they can't be loaded.
+  Future<void> _loadHints() async {
+    final s = Kasita.read(context);
+    try {
+      final prices = await s.api.shoppingPrices(s.hid);
+      if (!mounted) return;
+      setState(() {
+        _hints = {
+          for (final p in prices)
+            if (p['hint'] != null) p['id'] as String: p['hint'] as String,
+        };
+      });
+    } catch (_) {}
   }
 
   Future<void> _loadStores() async {
@@ -458,6 +476,15 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
     );
   }
 
+  Widget? _subtitle(ShoppingItem i) {
+    final first = i.auto ? 'running low' : i.note;
+    final hint = i.done ? null : _hints[i.id];
+    if (hint == null) return first == null ? null : Text(first);
+    final hintText = Text(hint, style: TextStyle(color: Theme.of(context).colorScheme.tertiary, fontSize: 12));
+    if (first == null) return hintText;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(first), hintText]);
+  }
+
   Widget _tile(ShoppingItem i) {
     final cs = Theme.of(context).colorScheme;
     return Dismissible(
@@ -478,7 +505,7 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
           i.quantity == 1 ? i.name : '${fmtQty(i.quantity)} × ${i.name}',
           style: i.done ? TextStyle(decoration: TextDecoration.lineThrough, color: cs.outline) : null,
         ),
-        subtitle: i.auto ? const Text('running low') : (i.note == null ? null : Text(i.note!)),
+        subtitle: _subtitle(i),
       ),
     );
   }
