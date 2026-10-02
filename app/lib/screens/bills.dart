@@ -481,7 +481,7 @@ class _BillsScreenState extends State<BillsScreen> {
           : RefreshIndicator(
               onRefresh: _load,
               child: ListView(
-                padding: const EdgeInsets.only(bottom: 96),
+                padding: navBarSafe(context, const EdgeInsets.only(bottom: 96)),
                 children: [
                   if (bills.isEmpty)
                     const Padding(
@@ -865,7 +865,7 @@ class _BillScreenState extends State<BillScreen> {
       body: b == null
           ? const Center(child: CircularProgressIndicator())
           : ListView(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
+              padding: navBarSafe(context, const EdgeInsets.fromLTRB(16, 8, 16, 96)),
               children: [
                 if (_photo != null)
                   GestureDetector(

@@ -64,7 +64,7 @@ class _FunStatsScreenState extends State<FunStatsScreen> {
           : RefreshIndicator(
               onRefresh: _load,
               child: ListView(
-                padding: EdgeInsets.fromLTRB(16, 8, 16, 16 + MediaQuery.viewPaddingOf(context).bottom),
+                padding: navBarSafe(context, const EdgeInsets.fromLTRB(16, 8, 16, 16)),
                 children: [
                   for (final h in (s['headlines'] as List? ?? const []))
                     Card(

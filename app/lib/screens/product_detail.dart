@@ -259,7 +259,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: navBarSafe(context, const EdgeInsets.all(16)),
         children: [
           Row(
             children: [

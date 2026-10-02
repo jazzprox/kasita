@@ -315,7 +315,7 @@ class _StoreMapScreenState extends State<StoreMapScreen> {
                 if (unlocated > 0 && _placing == null)
                   Positioned(
                     left: 12,
-                    bottom: 12 + MediaQuery.viewPaddingOf(context).bottom,
+                    bottom: 12 + MediaQuery.paddingOf(context).bottom,
                     child: ActionChip(
                       avatar: const Icon(Icons.wrong_location_outlined, size: 18),
                       label: Text('$unlocated not on the map'),

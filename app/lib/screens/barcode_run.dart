@@ -250,28 +250,31 @@ class _BarcodeRunScreenState extends State<BarcodeRunScreen> {
               ],
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _manual,
-                    keyboardType: TextInputType.number,
-                    onSubmitted: _attach,
-                    decoration: const InputDecoration(
-                      hintText: 'Or type the number',
-                      border: OutlineInputBorder(),
-                      isDense: true,
+          SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _manual,
+                      keyboardType: TextInputType.number,
+                      onSubmitted: _attach,
+                      decoration: const InputDecoration(
+                        hintText: 'Or type the number',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                /* SKIP is as important as scan: an item with no barcode on it
-                   at all (loose veg, something decanted) would otherwise stop
-                   the whole run. */
-                TextButton(onPressed: _busy ? null : _skip, child: const Text('Skip')),
-              ],
+                  const SizedBox(width: 8),
+                  /* SKIP is as important as scan: an item with no barcode on it
+                     at all (loose veg, something decanted) would otherwise stop
+                     the whole run. */
+                  TextButton(onPressed: _busy ? null : _skip, child: const Text('Skip')),
+                ],
+              ),
             ),
           ),
         ],

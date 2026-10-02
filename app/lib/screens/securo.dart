@@ -58,7 +58,7 @@ class _SecuroScreenState extends State<SecuroScreen> {
       body: st == null
           ? const Center(child: CircularProgressIndicator())
           : ListView(
-              padding: const EdgeInsets.all(20),
+              padding: navBarSafe(context, const EdgeInsets.all(20)),
               children: [
                 Text(
                   'Link receipts to the card payment in Securo: the receipt photo is attached to the payment '

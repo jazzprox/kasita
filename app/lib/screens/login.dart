@@ -73,7 +73,8 @@ class _LoginScreenState extends State<LoginScreen> {
     return Scaffold(
       body: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          // clear of the status bar and the system navigation bar (edge to edge)
+          padding: EdgeInsets.all(24) + MediaQuery.paddingOf(context),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 420),
             child: AutofillGroup(

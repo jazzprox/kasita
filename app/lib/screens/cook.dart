@@ -79,7 +79,7 @@ class _CookScreenState extends State<CookScreen> {
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: navBarSafe(context, const EdgeInsets.all(16)),
         children: [
           TextField(
             controller: _note,

@@ -133,7 +133,7 @@ class _ChatGPTScreenState extends State<ChatGPTScreen> {
       body: st == null
           ? const Center(child: CircularProgressIndicator())
           : ListView(
-              padding: const EdgeInsets.all(20),
+              padding: navBarSafe(context, const EdgeInsets.all(20)),
               children: [
                 Text(
                   'Kasita uses your ChatGPT subscription to read grocery receipts. '

@@ -72,8 +72,9 @@ Future<bool> showPurchaseSheet(BuildContext context, Product p) async {
     context: context,
     isScrollControlled: true,
     showDragHandle: true,
-    builder: (_) => Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+    builder: (sheet) => Padding(
+      // above the keyboard when it is up, else above the system navigation bar
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(sheet).bottom + MediaQuery.paddingOf(sheet).bottom),
       child: _PurchaseSheet(product: p),
     ),
   );

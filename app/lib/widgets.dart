@@ -59,6 +59,13 @@ class ProductThumb extends StatelessWidget {
   }
 }
 
+/// [p] plus room for the system navigation bar at the bottom. Android draws apps edge to edge,
+/// so the last button of a scrolling form needs this to scroll clear of home/back/recents.
+/// The inset is 0 while the keyboard is up (the keyboard takes that space) and under a
+/// Scaffold with a bottom bar (the bar takes it), so nothing is padded twice.
+EdgeInsets navBarSafe(BuildContext context, EdgeInsets p) =>
+    p.copyWith(bottom: p.bottom + MediaQuery.paddingOf(context).bottom);
+
 void toast(BuildContext context, String msg, {bool error = false}) {
   final cs = Theme.of(context).colorScheme;
   ScaffoldMessenger.of(context)

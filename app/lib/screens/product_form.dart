@@ -86,7 +86,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       body: Form(
         key: _form,
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: navBarSafe(context, const EdgeInsets.all(16)),
           children: [
             if (pre != null)
               Card(

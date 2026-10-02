@@ -99,7 +99,7 @@ class _StoreEditScreenState extends State<StoreEditScreen> {
       body: Form(
         key: _form,
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: navBarSafe(context, const EdgeInsets.all(16)),
           children: [
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
