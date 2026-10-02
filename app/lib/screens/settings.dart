@@ -9,6 +9,7 @@ import '../widgets.dart';
 import 'activity.dart';
 import 'bills.dart';
 import 'chatgpt.dart';
+import 'fun_stats.dart';
 import 'map.dart';
 import 'nearby.dart';
 import 'receipts.dart';
@@ -171,6 +172,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: const Text('Map'),
             subtitle: const Text('Where you shop, and what you spend there'),
             onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const StoreMapScreen())),
+          ),
+          ListTile(
+            leading: const Icon(Icons.emoji_events_outlined),
+            title: const Text('Fun stats'),
+            subtitle: const Text('Home turf, favourite days, minimarkets vs supermarkets'),
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const FunStatsScreen())),
           ),
           ListTile(
             leading: const Icon(Icons.storefront_outlined),

@@ -10,11 +10,11 @@ Stock is a list of entries ("2 x milk, bought Tuesday, best before 3 Oct"),
 not a single counter, so each purchase keeps its own expiry date and price.
 """
 import uuid
-from datetime import date, datetime, timezone
+from datetime import date, datetime, time, timezone
 from decimal import Decimal
 
 from sqlalchemy import (
-    JSON, Boolean, Date, DateTime, ForeignKey, Index, Numeric, String, Text, UniqueConstraint, false,
+    JSON, Boolean, Date, DateTime, ForeignKey, Index, Numeric, String, Text, Time, UniqueConstraint, false,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -54,6 +54,9 @@ class Household(Base):
     ntfy_topic: Mapped[str | None] = mapped_column(String(64))
     grocery_budget: Mapped[Decimal | None] = mapped_column(Money)  # per calendar month; None = no budget
     budget_alerted: Mapped[str | None] = mapped_column(String(16))  # last alert sent, e.g. "2026-10:80"
+    # "home" on the store map, for the how-far-do-you-travel stat; set by any member. None = not set.
+    home_lat: Mapped[float | None]
+    home_lon: Mapped[float | None]
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     members: Mapped[list["Membership"]] = relationship(back_populates="household", cascade="all, delete-orphan")
@@ -149,6 +152,13 @@ class Store(Base):
     lat: Mapped[float | None]
     lon: Mapped[float | None]
     location_source: Mapped[str | None] = mapped_column(String(12))  # manual | geocoded
+    kind: Mapped[str | None] = mapped_column(String(16))  # minimarket | supermarket | other; None = guess from name
+
+    @property
+    def kind_guess(self) -> str:
+        """The user's choice, else a guess from the name ("GUONSHENG MINIMARKET" -> minimarket)."""
+        from .services.store_stats import guess_kind
+        return self.kind or guess_kind(self.name)
 
 
 class GeocodeCache(Base):
@@ -257,6 +267,7 @@ class Receipt(Base):
     household_id: Mapped[str] = mapped_column(ForeignKey("households.id", ondelete="CASCADE"), index=True)
     store_id: Mapped[str | None] = mapped_column(ForeignKey("stores.id", ondelete="SET NULL"))
     purchased_on: Mapped[date | None] = mapped_column(Date)
+    purchased_time: Mapped[time | None] = mapped_column(Time)  # as printed on the receipt, when it is
     total: Mapped[Decimal | None] = mapped_column(Money)
     currency: Mapped[str | None] = mapped_column(String(3))
     store_name: Mapped[str | None] = mapped_column(String(120))  # as printed, before it is matched to a Store

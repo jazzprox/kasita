@@ -32,6 +32,8 @@ class Store {
   final String? payeeMatch, address, phone, crib;
   final double? lat, lon;
   final String? locationSource; // manual | geocoded
+  final String? kind; // minimarket | supermarket | other, as set; null = guessed
+  final String kindGuess; // what Kasita assumes
   Store.fromJson(Map<String, dynamic> j)
     : id = j['id'],
       name = j['name'],
@@ -41,7 +43,9 @@ class Store {
       crib = j['crib'],
       lat = _numOrNull(j['lat']),
       lon = _numOrNull(j['lon']),
-      locationSource = j['location_source'];
+      locationSource = j['location_source'],
+      kind = j['kind'],
+      kindGuess = j['kind_guess'] ?? 'other';
   bool get located => lat != null && lon != null;
 }
 

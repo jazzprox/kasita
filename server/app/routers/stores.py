@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..deps import HouseholdAccess, household_access
 from ..models import Store
-from ..schemas import StoreOut, StorePatch
+from ..schemas import HomeIn, StoreOut, StorePatch
 from ..services import geocode
 from ..services import store_stats as stats
 from ..services.receipts import crib_key
@@ -69,6 +69,8 @@ def update_store(store_id: str, body: StorePatch, background: BackgroundTasks,
             setattr(s, field, (data[field] or "").strip() or None)
     if "crib" in data:
         s.crib = crib_key(data["crib"])
+    if "kind" in data:
+        s.kind = data["kind"]
     if "lat" in data or "lon" in data:
         lat, lon = data.get("lat", s.lat), data.get("lon", s.lon)
         if (lat is None) != (lon is None):
@@ -82,3 +84,29 @@ def update_store(store_id: str, body: StorePatch, background: BackgroundTasks,
             background.add_task(geocode.geocode_store_id, s.id)
     db.commit()
     return s
+
+
+# --- fun stats ---------------------------------------------------------------------
+stats_router = APIRouter(prefix="/api/households/{household_id}", tags=["stores"])
+
+
+@stats_router.get("/home")
+def home(a: HouseholdAccess = Depends(household_access)):
+    """Home on the map (for the travel stat), or nulls."""
+    return {"lat": a.household.home_lat, "lon": a.household.home_lon}
+
+
+@stats_router.put("/home")
+def set_home(body: HomeIn, a: HouseholdAccess = Depends(household_access), db: Session = Depends(get_db)):
+    if (body.lat is None) != (body.lon is None):
+        raise HTTPException(422, "Give both lat and lon, or neither")
+    a.household.home_lat, a.household.home_lon = body.lat, body.lon
+    db.commit()
+    return {"lat": body.lat, "lon": body.lon}
+
+
+@stats_router.get("/stats")
+def fun_stats(days: int = 365, a: HouseholdAccess = Depends(household_access), db: Session = Depends(get_db)):
+    """Home turf, trips per week and month, favourite days and times, how far you travel, and
+    minimarkets vs supermarkets. From booked receipts over the last `days`."""
+    return stats.fun_stats(db, a.household, days=max(7, min(days, 3660)))

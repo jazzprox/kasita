@@ -56,6 +56,7 @@ class _StoreEditScreenState extends State<StoreEditScreen> {
   late final _phone = TextEditingController(text: widget.store.phone ?? '');
   late final _crib = TextEditingController(text: widget.store.crib ?? '');
   late final _payee = TextEditingController(text: widget.store.payeeMatch ?? '');
+  late String? _kind = widget.store.kind;
   bool _busy = false;
 
   String? _t(TextEditingController c) => c.text.trim().isEmpty ? null : c.text.trim();
@@ -71,6 +72,7 @@ class _StoreEditScreenState extends State<StoreEditScreen> {
         'phone': _t(_phone),
         'crib': _t(_crib),
         'payee_match': _t(_payee),
+        'kind': _kind,
       });
       await s.reloadStores();
       if (mounted) Navigator.pop(context);
@@ -117,6 +119,23 @@ class _StoreEditScreenState extends State<StoreEditScreen> {
               keyboard: TextInputType.number,
             ),
             _field(_payee, 'Shows on card payments as', help: 'For linking receipts in Securo, e.g. MANGUSA'),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: DropdownButtonFormField<String?>(
+                initialValue: _kind,
+                decoration: const InputDecoration(
+                  labelText: 'Kind of store',
+                  helperText: 'For the minimarket vs supermarket stat',
+                  border: OutlineInputBorder(),
+                ),
+                items: [
+                  DropdownMenuItem(value: null, child: Text('Guess from the name (${_kindLabel(st.kindGuess)})')),
+                  for (final k in const ['minimarket', 'supermarket', 'other'])
+                    DropdownMenuItem(value: k, child: Text(_kindLabel(k))),
+                ],
+                onChanged: (v) => setState(() => _kind = v),
+              ),
+            ),
             if (st.located)
               ListTile(
                 contentPadding: EdgeInsets.zero,
@@ -135,3 +154,9 @@ class _StoreEditScreenState extends State<StoreEditScreen> {
     );
   }
 }
+
+String _kindLabel(String k) => switch (k) {
+  'minimarket' => 'Minimarket',
+  'supermarket' => 'Supermarket',
+  _ => 'Other',
+};

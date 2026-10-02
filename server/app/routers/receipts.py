@@ -45,7 +45,8 @@ def _editable(r: Receipt) -> None:
 def receipt_out(db: Session, r: Receipt, with_lines: bool = False) -> ReceiptOut:
     totals = [ln.line_total for ln in r.lines if ln.line_total is not None]
     out = ReceiptOut(id=r.id, status=r.status, error=r.error, store_id=r.store_id, store_name=r.store_name,
-                     purchased_on=r.purchased_on, total=r.total, currency=r.currency, created_at=r.created_at,
+                     purchased_on=r.purchased_on, purchased_time=r.purchased_time, total=r.total,
+                     currency=r.currency, created_at=r.created_at,
                      securo_transaction_id=r.securo_transaction_id, line_count=len(r.lines), lines_total=sum(totals) if totals else None)
     if with_lines:
         products = {p.id: p for p in db.scalars(select(Product).where(

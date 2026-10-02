@@ -26,7 +26,8 @@ app = FastAPI(title="Kasita", version="0.1.0", lifespan=lifespan,
               description="Household pantry, shopping list, barcode and receipt scanning.")
 
 for r in (auth.router, households.router, products.router, stock.router, shopping.router, receipts.router,
-          integrations.router, recipes.router, bills.router, stores.router):
+          integrations.router, recipes.router, bills.router, stores.router,
+          stores.stats_router):
     app.include_router(r)
 app.include_router(products.public)
 

@@ -23,6 +23,7 @@ class _StoreMapScreenState extends State<StoreMapScreen> {
   final _map = MapController();
   List<Map<String, dynamic>>? _stores;
   String? _placing; // store id waiting for a tap on the map
+  (double, double)? _home; // for the travel stat
 
   @override
   void initState() {
@@ -34,7 +35,13 @@ class _StoreMapScreenState extends State<StoreMapScreen> {
     final s = Kasita.read(context);
     try {
       final rows = await s.api.storeMap(s.hid);
-      if (mounted) setState(() => _stores = rows);
+      final home = await s.api.home(s.hid);
+      if (mounted) {
+        setState(() {
+          _stores = rows;
+          _home = home;
+        });
+      }
     } on ApiException catch (e) {
       if (mounted) toast(context, e.message, error: true);
     }
@@ -64,7 +71,6 @@ class _StoreMapScreenState extends State<StoreMapScreen> {
   /// Long-press: which store is here?
   Future<void> _longPress(LatLng at) async {
     final rows = [...?_stores]..sort((a, b) => (a['lat'] == null ? 0 : 1).compareTo(b['lat'] == null ? 0 : 1));
-    if (rows.isEmpty) return toast(context, 'No stores yet: book a receipt first');
     final id = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
@@ -74,6 +80,19 @@ class _StoreMapScreenState extends State<StoreMapScreen> {
         child: ListView(
           shrinkWrap: true,
           children: [
+            ListTile(
+              leading: const Icon(Icons.home_outlined),
+              title: const Text('Home is here'),
+              subtitle: const Text('Only for the "how far do you travel" stat'),
+              onTap: () => Navigator.pop(c, '#home'),
+            ),
+            if (_home != null)
+              ListTile(
+                leading: const Icon(Icons.close),
+                title: const Text('Remove home'),
+                onTap: () => Navigator.pop(c, '#nohome'),
+              ),
+            const Divider(),
             const ListTile(title: Text('Which store is here?')),
             for (final x in rows)
               ListTile(
@@ -86,7 +105,18 @@ class _StoreMapScreenState extends State<StoreMapScreen> {
         ),
       ),
     );
-    if (id != null) await _place(id, at);
+    if (!mounted) return;
+    if (id == '#home' || id == '#nohome') {
+      final s = Kasita.read(context);
+      try {
+        await s.api.setHome(s.hid, id == '#home' ? at.latitude : null, id == '#home' ? at.longitude : null);
+        if (mounted) setState(() => _home = id == '#home' ? (at.latitude, at.longitude) : null);
+      } on ApiException catch (e) {
+        if (mounted) toast(context, e.message, error: true);
+      }
+    } else if (id != null) {
+      await _place(id, at);
+    }
   }
 
   Future<void> _showStore(Map<String, dynamic> x) async {
@@ -209,6 +239,16 @@ class _StoreMapScreenState extends State<StoreMapScreen> {
                     ),
                     MarkerLayer(
                       markers: [
+                        if (_home != null)
+                          Marker(
+                            point: LatLng(_home!.$1, _home!.$2),
+                            width: 34,
+                            height: 34,
+                            child: Tooltip(
+                              message: 'Home',
+                              child: Icon(Icons.home, color: cs.secondary, size: 34),
+                            ),
+                          ),
                         for (final x in located)
                           () {
                             final spent = _d(x['total']) ?? 0;

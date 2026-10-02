@@ -13,7 +13,7 @@ import json
 import logging
 import re
 import uuid
-from datetime import date, datetime, timezone
+from datetime import date, datetime, time, timezone
 from decimal import Decimal, InvalidOperation
 from difflib import SequenceMatcher
 from pathlib import Path
@@ -32,7 +32,7 @@ log = logging.getLogger(__name__)
 
 INSTRUCTIONS = """You read photos of shop receipts (mostly supermarkets in Curaçao) and reply with ONLY a JSON object, no prose, no code fences:
 {"store": string|null, "store_address": string|null, "store_phone": string|null, "store_tax_id": string|null,
- "date": "YYYY-MM-DD"|null, "currency": string|null, "total": number|null,
+ "date": "YYYY-MM-DD"|null, "time": "HH:MM"|null, "currency": string|null, "total": number|null,
  "lines": [{"text": string, "name": string, "quantity": number, "unit_price": number|null, "line_total": number|null, "kind": "item"|"department"|"fee"|"deposit"}]}
 
 - "store": the shop's name as printed at the top (e.g. "GUONSHENG MINIMARKET", "Centrum Piscadera").
@@ -42,6 +42,7 @@ INSTRUCTIONS = """You read photos of shop receipts (mostly supermarkets in Cura�
 - "store_phone": the shop's phone number as printed (e.g. "7374534"); null if none.
 - "store_tax_id": the shop's tax / business registration number: in Curaçao the "CRIB" or "CRIB NUMBER"
   (also "KvK", "RNC", "NIF", "Tax ID", "BTW"). Digits only, e.g. "102768456"; null if none is printed.
+- "time": when the receipt was printed, 24-hour clock ("6:42 PM" -> "18:42"); null if no time is printed.
 - "text": the product line exactly as printed (abbreviations and all), without the price.
 - "name": a short, plain product name a person would write on a shopping list, in English, keeping the brand when it is printed, with size if printed (e.g. "Goisco toilet paper 12 rolls", "Whole milk 1 L").
 - "quantity": number of units bought; for weighed items the weight in kg. Default 1.
@@ -186,6 +187,17 @@ def _date(v) -> date | None:
         return None
 
 
+def _time(v) -> time | None:
+    m = re.match(r"^\s*(\d{1,2})[:.](\d{2})", str(v or ""))
+    if not m:
+        return None
+    h, mi = int(m.group(1)), int(m.group(2))
+    ampm = re.search(r"\b([AP])\.?\s*M\b", str(v).upper())
+    if ampm and 1 <= h <= 12:
+        h = h % 12 + (12 if ampm.group(1) == "P" else 0)
+    return time(h, mi) if h < 24 and mi < 60 else None
+
+
 def text_key(text: str) -> str:
     return re.sub(r"\s+", " ", re.sub(r"[^0-9A-Z ]+", " ", text.upper())).strip()[:255]
 
@@ -292,6 +304,7 @@ def apply_parsed(db: Session, receipt: Receipt, parsed: dict) -> None:
     receipt.raw = parsed
     receipt.store_name = (parsed.get("store") or "")[:120] or None
     receipt.purchased_on = _date(parsed.get("date")) or receipt.purchased_on
+    receipt.purchased_time = _time(parsed.get("time")) or receipt.purchased_time
     receipt.currency = (parsed.get("currency") or "")[:3].upper() or _household_currency(db, receipt.household_id)
     receipt.total = _num(parsed.get("total"))
     if not receipt.store_id:

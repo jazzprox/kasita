@@ -196,6 +196,19 @@ class Api {
   Future<Map<String, dynamic>> storeSummary(String hid, String id) async =>
       Map<String, dynamic>.from(await get('${_h(hid)}/stores/$id/summary'));
 
+  /// Home on the map (for the travel stat): (lat, lon) or null.
+  Future<(double, double)?> home(String hid) async {
+    final j = await get('${_h(hid)}/home') as Map;
+    return j['lat'] == null ? null : ((j['lat'] as num).toDouble(), (j['lon'] as num).toDouble());
+  }
+
+  Future<void> setHome(String hid, double? lat, double? lon) =>
+      _send('PUT', '${_h(hid)}/home', body: {'lat': lat, 'lon': lon});
+
+  /// Fun stats: home turf, trips, favourite days and times, travel, minimarkets vs supermarkets.
+  Future<Map<String, dynamic>> funStats(String hid, {int days = 365}) async =>
+      Map<String, dynamic>.from(await get('${_h(hid)}/stats', {'days': '$days'}));
+
   /// Look the store up on OpenStreetMap now (address, then name).
   Future<Store> geocodeStore(String hid, String id) async =>
       Store.fromJson(await post('${_h(hid)}/stores/$id/geocode'));

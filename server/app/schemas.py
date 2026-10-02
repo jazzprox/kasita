@@ -1,5 +1,6 @@
-from datetime import date, datetime
+from datetime import date, datetime, time
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -131,6 +132,8 @@ class StoreOut(ORM):
     lat: float | None = None
     lon: float | None = None
     location_source: str | None = None  # manual | geocoded
+    kind: str | None = None  # minimarket | supermarket | other, as set by the user (None = not set)
+    kind_guess: str = "other"  # what Kasita assumes: `kind`, else a guess from the name
 
 
 class StorePatch(BaseModel):
@@ -141,6 +144,13 @@ class StorePatch(BaseModel):
     address: str | None = Field(default=None, max_length=255)
     phone: str | None = Field(default=None, max_length=40)
     crib: str | None = Field(default=None, max_length=40)
+    lat: float | None = Field(default=None, ge=-90, le=90)
+    lon: float | None = Field(default=None, ge=-180, le=180)
+    kind: Literal["minimarket", "supermarket", "other"] | None = None  # null = guess from the name
+
+
+class HomeIn(BaseModel):
+    """Home on the map, for the travel stat. Both null clears it."""
     lat: float | None = Field(default=None, ge=-90, le=90)
     lon: float | None = Field(default=None, ge=-180, le=180)
 
@@ -331,6 +341,7 @@ class ReceiptOut(BaseModel):
     store_id: str | None
     store_name: str | None
     purchased_on: date | None
+    purchased_time: time | None = None
     total: Decimal | None
     currency: str | None
     created_at: datetime
