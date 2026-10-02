@@ -141,6 +141,14 @@ class Store(Base):
     name: Mapped[str] = mapped_column(String(120))
     # text that appears in bank/card transactions for this store, e.g. "MANGUSA"
     payee_match: Mapped[str | None] = mapped_column(String(120))
+    # store profile, read from receipts ("CAS CORAWEG 78", "Tel: 7374534", "CRIB NUMBER: 102768456")
+    # or typed by the user. Receipts only fill what is empty; they never overwrite.
+    address: Mapped[str | None] = mapped_column(String(255))
+    phone: Mapped[str | None] = mapped_column(String(40))
+    crib: Mapped[str | None] = mapped_column(String(40))  # tax / registration number (CRIB, KvK, RNC...), digits
+    lat: Mapped[float | None]
+    lon: Mapped[float | None]
+    location_source: Mapped[str | None] = mapped_column(String(12))  # manual | geocoded
 
 
 class Product(Base):

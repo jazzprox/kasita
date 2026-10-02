@@ -12,6 +12,7 @@ import 'receipts.dart';
 import 'recipes.dart';
 import 'securo.dart';
 import 'spending.dart';
+import 'stores.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -161,6 +162,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: const Text('Spending'),
             subtitle: const Text('What groceries cost, per category and store'),
             onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SpendingScreen())),
+          ),
+          ListTile(
+            leading: const Icon(Icons.storefront_outlined),
+            title: const Text('Stores'),
+            subtitle: const Text('Address, phone and CRIB, filled in from receipts'),
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const StoresScreen())),
           ),
           ListTile(
             leading: const Icon(Icons.auto_awesome_outlined),

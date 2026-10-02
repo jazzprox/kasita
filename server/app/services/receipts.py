@@ -31,9 +31,17 @@ from . import stock as stock_svc
 log = logging.getLogger(__name__)
 
 INSTRUCTIONS = """You read photos of shop receipts (mostly supermarkets in Curaçao) and reply with ONLY a JSON object, no prose, no code fences:
-{"store": string|null, "date": "YYYY-MM-DD"|null, "currency": string|null, "total": number|null,
+{"store": string|null, "store_address": string|null, "store_phone": string|null, "store_tax_id": string|null,
+ "date": "YYYY-MM-DD"|null, "currency": string|null, "total": number|null,
  "lines": [{"text": string, "name": string, "quantity": number, "unit_price": number|null, "line_total": number|null, "kind": "item"|"department"|"fee"|"deposit"}]}
 
+- "store": the shop's name as printed at the top (e.g. "GUONSHENG MINIMARKET", "Centrum Piscadera").
+- "store_address": the shop's street address exactly as printed, without phone or tax lines; null if none.
+  Addresses in Curaçao put the street name first and the house number after it ("CAS CORAWEG 78",
+  "Schottegatweg Oost 191", "Kaya Flamboyan 12"): keep that order, never move the number to the front.
+- "store_phone": the shop's phone number as printed (e.g. "7374534"); null if none.
+- "store_tax_id": the shop's tax / business registration number: in Curaçao the "CRIB" or "CRIB NUMBER"
+  (also "KvK", "RNC", "NIF", "Tax ID", "BTW"). Digits only, e.g. "102768456"; null if none is printed.
 - "text": the product line exactly as printed (abbreviations and all), without the price.
 - "name": a short, plain product name a person would write on a shopping list, in English, keeping the brand when it is printed, with size if printed (e.g. "Goisco toilet paper 12 rolls", "Whole milk 1 L").
 - "quantity": number of units bought; for weighed items the weight in kg. Default 1.
@@ -182,16 +190,88 @@ def text_key(text: str) -> str:
     return re.sub(r"\s+", " ", re.sub(r"[^0-9A-Z ]+", " ", text.upper())).strip()[:255]
 
 
-def find_store(db: Session, household_id: str, printed: str | None) -> Store | None:
+def crib_key(v) -> str | None:
+    """A tax / registration number as digits only ("CRIB NUMBER: 102-768-456" -> "102768456")."""
+    key = re.sub(r"\D+", "", str(v or ""))
+    return key[:40] if len(key) >= 5 else None
+
+
+_HOUSE_NO = re.compile(r"^(.*?)[\s,]+(?:no\.?\s*|#\s*)?(\d+\s*[a-z]?(?:\s*[-/]\s*\d+\s*[a-z]?)?)\s*$", re.I)
+
+
+def split_address(address: str | None) -> tuple[str, str | None]:
+    """("Cas Coraweg 78") -> ("Cas Coraweg", "78"). In Curaçao the street comes first and the house
+    number last ("Schottegatweg Oost 191", "Kaya Flamboyan 12A", "Caracasbaaiweg 12-14")."""
+    a = re.sub(r"\s+", " ", (address or "").strip().strip(","))
+    m = _HOUSE_NO.match(a)
+    if m and re.search(r"[A-Za-z]", m.group(1)):
+        return m.group(1).strip(" ,"), re.sub(r"\s+", "", m.group(2)).upper()
+    return a, None
+
+
+def _street_key(v: str | None) -> str:
+    return re.sub(r"[^0-9A-Z]+", "", split_address(v)[0].upper())
+
+
+def _same_address(a: str | None, b: str | None) -> bool | None:
+    """Same street? True / False when both are known, None when either is missing. Only the street
+    counts: a misread house number on one receipt should not make a second store."""
+    ka, kb = _street_key(a), _street_key(b)
+    if not ka or not kb:
+        return None
+    return ka in kb or kb in ka
+
+
+def find_store(db: Session, household_id: str, printed: str | None, crib: str | None = None,
+               address: str | None = None) -> Store | None:
+    """The household's store for what a receipt printed.
+
+    The tax number (CRIB) is read far more reliably than a shop's name, so it decides first. A chain
+    can print one CRIB at several branches: then the address picks the branch, and a branch with
+    another known address is not this one."""
+    stores = db.scalars(select(Store).where(Store.household_id == household_id)).all()
+    crib = crib_key(crib)
+    if crib:
+        same = [s for s in stores if s.crib == crib and _same_address(s.address, address) is not False]
+        by_addr = [s for s in same if _same_address(s.address, address)]
+        by_name = [s for s in same if printed and s.name.lower() == printed.strip().lower()]
+        if by_addr or by_name or same:
+            return (by_addr or by_name or same)[0]
     if not printed:
         return None
     wanted = printed.strip().lower()
-    stores = db.scalars(select(Store).where(Store.household_id == household_id)).all()
     for s in stores:
+        if crib and s.crib == crib and _same_address(s.address, address) is False:
+            continue  # another branch of the same chain
         if s.name.lower() == wanted or (s.payee_match and s.payee_match.lower() in wanted) or s.name.lower() in wanted \
                 or wanted in s.name.lower():
             return s
     return None
+
+
+def store_profile(parsed: dict | None) -> dict:
+    """Address, phone and tax number the AI read from a receipt (cleaned; missing ones left out)."""
+    p = parsed or {}
+    out = {}
+    if (a := re.sub(r"\s+", " ", str(p.get("store_address") or "")).strip()[:255]):
+        out["address"] = a
+    if (t := re.sub(r"[^0-9+ ()-]", "", str(p.get("store_phone") or "")).strip()[:40]) and \
+            sum(c.isdigit() for c in t) >= 6:
+        out["phone"] = t
+    if (c := crib_key(p.get("store_tax_id"))):
+        out["crib"] = c
+    return out
+
+
+def fill_store(db: Session, store: Store, parsed: dict | None) -> bool:
+    """Fill the store's empty profile fields from a receipt. What is already there (typed by the user,
+    or read from an earlier receipt) is never overwritten. True when the address was just filled."""
+    got_address = False
+    for field, value in store_profile(parsed).items():
+        if getattr(store, field) in (None, ""):
+            setattr(store, field, value)
+            got_address = got_address or field == "address"
+    return got_address
 
 
 def _guess(name: str, products: list[Product]) -> Product | None:
@@ -215,7 +295,8 @@ def apply_parsed(db: Session, receipt: Receipt, parsed: dict) -> None:
     receipt.currency = (parsed.get("currency") or "")[:3].upper() or _household_currency(db, receipt.household_id)
     receipt.total = _num(parsed.get("total"))
     if not receipt.store_id:
-        store = find_store(db, receipt.household_id, receipt.store_name)
+        prof = store_profile(parsed)
+        store = find_store(db, receipt.household_id, receipt.store_name, prof.get("crib"), prof.get("address"))
         receipt.store_id = store.id if store else None
     receipt.lines.clear()
     db.flush()
@@ -302,13 +383,17 @@ def confirm(db: Session, receipt: Receipt, user_id: str | None, *, create_missin
             location_id: str | None = None) -> dict:
     """Book the reviewed lines as purchases and learn their names for next time."""
     hid = receipt.household_id
+    prof = store_profile(receipt.raw)
     if not receipt.store_id and receipt.store_name:
-        store = find_store(db, hid, receipt.store_name)
+        store = find_store(db, hid, receipt.store_name, prof.get("crib"), prof.get("address"))
         if not store:
-            store = Store(household_id=hid, name=receipt.store_name.strip().title()[:120])
+            store = Store(household_id=hid, name=_new_store_name(db, hid, receipt.store_name))
             db.add(store)
             db.flush()
         receipt.store_id = store.id
+    store = db.get(Store, receipt.store_id) if receipt.store_id else None
+    if store is not None and store.household_id == hid:
+        fill_store(db, store, receipt.raw)
     added, created, skipped, spending = 0, 0, 0, 0
     # What THIS receipt has already created, keyed the way aliases are keyed.
     #
@@ -373,6 +458,16 @@ def confirm(db: Session, receipt: Receipt, user_id: str | None, *, create_missin
     receipt.status = "confirmed"
     receipt.confirmed_at = datetime.now(timezone.utc)
     return {"added": added, "created_products": created, "skipped": skipped, "spending_only": spending}
+
+
+def _new_store_name(db: Session, household_id: str, printed: str) -> str:
+    """A name for a store first seen on a receipt; "(2)" when a branch with that name exists."""
+    base = printed.strip().title()[:110]
+    taken = set(db.scalars(select(Store.name).where(Store.household_id == household_id)))
+    name, n = base, 2
+    while name in taken:
+        name, n = f"{base} ({n})", n + 1
+    return name
 
 
 def remember(db: Session, household_id: str, store_id: str | None, raw_text: str, product_id: str) -> None:

@@ -185,6 +185,9 @@ class Api {
       (await get('${_h(hid)}/stores') as List).map((e) => Store.fromJson(e)).toList();
   Future<Store> addStore(String hid, String name) async =>
       Store.fromJson(await post('${_h(hid)}/stores', {'name': name}));
+  Future<Store> store(String hid, String id) async => Store.fromJson(await get('${_h(hid)}/stores/$id'));
+  Future<Store> updateStore(String hid, String id, Map<String, dynamic> body) async =>
+      Store.fromJson(await patch('${_h(hid)}/stores/$id', body));
 
   Future<List<StockProduct>> stock(String hid) async =>
       (await get('${_h(hid)}/stock') as List).map((e) => StockProduct.fromJson(e)).toList();

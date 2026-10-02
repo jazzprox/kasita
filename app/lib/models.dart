@@ -29,7 +29,20 @@ class Location {
 
 class Store {
   final String id, name;
-  Store.fromJson(Map<String, dynamic> j) : id = j['id'], name = j['name'];
+  final String? payeeMatch, address, phone, crib;
+  final double? lat, lon;
+  final String? locationSource; // manual | geocoded
+  Store.fromJson(Map<String, dynamic> j)
+    : id = j['id'],
+      name = j['name'],
+      payeeMatch = j['payee_match'],
+      address = j['address'],
+      phone = j['phone'],
+      crib = j['crib'],
+      lat = _numOrNull(j['lat']),
+      lon = _numOrNull(j['lon']),
+      locationSource = j['location_source'];
+  bool get located => lat != null && lon != null;
 }
 
 class Product {

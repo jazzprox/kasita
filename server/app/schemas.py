@@ -125,6 +125,24 @@ class StoreOut(ORM):
     id: str
     name: str
     payee_match: str | None
+    address: str | None = None
+    phone: str | None = None
+    crib: str | None = None  # tax / registration number (CRIB, KvK, RNC...)
+    lat: float | None = None
+    lon: float | None = None
+    location_source: str | None = None  # manual | geocoded
+
+
+class StorePatch(BaseModel):
+    """Edit a store. Setting lat/lon pins it by hand (it is then never geocoded again);
+    both null removes the pin."""
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    payee_match: str | None = Field(default=None, max_length=120)
+    address: str | None = Field(default=None, max_length=255)
+    phone: str | None = Field(default=None, max_length=40)
+    crib: str | None = Field(default=None, max_length=40)
+    lat: float | None = Field(default=None, ge=-90, le=90)
+    lon: float | None = Field(default=None, ge=-180, le=180)
 
 
 # --- products ---------------------------------------------------------------
