@@ -8,10 +8,13 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..deps import HouseholdAccess, household_access
 from ..models import Location, Product, Receipt, ReceiptLine, Store
-from ..schemas import (ConfirmIn, ConfirmOut, ReceiptLineIn, ReceiptLineOut, ReceiptLinePatch, ReceiptOut,
-                       ReceiptPatch, SecuroCandidate, SecuroLinkIn)
+from ..schemas import (ConfirmIn, ConfirmOut, ReceiptLineIn, ReceiptLineOut, ReceiptLinePatch, ReceiptMoveIn,
+                       ReceiptOut, ReceiptPatch, ReceiptScanIn, ReceiptScanOut, SecuroCandidate, SecuroLinkIn)
+from ..services import departments
+from ..services import receipt_scan as scan
 from ..services import receipts as svc
 from ..services import securo
+from ..services.stock import get_product
 from .stock import _check_ref
 
 router = APIRouter(prefix="/api/households/{household_id}/receipts", tags=["receipts"])
@@ -45,11 +48,16 @@ def receipt_out(db: Session, r: Receipt, with_lines: bool = False) -> ReceiptOut
                      purchased_on=r.purchased_on, total=r.total, currency=r.currency, created_at=r.created_at,
                      securo_transaction_id=r.securo_transaction_id, line_count=len(r.lines), lines_total=sum(totals) if totals else None)
     if with_lines:
-        names = {p.id: p.name for p in db.scalars(select(Product).where(
+        products = {p.id: p for p in db.scalars(select(Product).where(
             Product.id.in_([ln.product_id for ln in r.lines if ln.product_id])))}
-        out.lines = [ReceiptLineOut.model_validate(ln).model_copy(update={"product_name": names.get(ln.product_id)})
-                     for ln in r.lines]
+        out.lines = [line_out(ln, products.get(ln.product_id)) for ln in r.lines]
     return out
+
+
+def line_out(ln: ReceiptLine, p: Product | None) -> ReceiptLineOut:
+    return ReceiptLineOut.model_validate(ln).model_copy(update={
+        "product_name": p.name if p else None, "product_image_url": p.image_url if p else None,
+        "suggested_category": ln.spending_category or departments.default_category(ln.raw_text, ln.name)})
 
 
 @router.get("", response_model=list[ReceiptOut])
@@ -147,12 +155,96 @@ def patch_line(receipt_id: str, line_id: str, body: ReceiptLinePatch, a: Househo
     if fields.get("product_id"):
         _check_ref(db, Product, fields["product_id"], a.household.id, "Product")
         line.matched_by = "user"
+        line.spending_only = False
+    if fields.get("spending_only"):
+        # counts in spending under a category; no product, no stock
+        line.product_id, line.matched_by, line.skip = None, None, False
+        fields.pop("product_id", None)
+        fields.setdefault("spending_category", None)
+        fields["spending_category"] = fields["spending_category"] or line.spending_category \
+            or departments.default_category(line.raw_text, line.name)
+    if fields.get("skip"):
+        line.spending_only = False
+    if fields.get("department") is False:
+        # "this is a real product": forget what was learned, so its name is remembered on booking
+        departments.forget(db, a.household.id, r.store_id, svc.text_key(line.raw_text))
     for k, v in fields.items():
         if v is not None or k in ("unit_price", "line_total", "name"):
             setattr(line, k, v)
     db.commit()
-    p = db.get(Product, line.product_id) if line.product_id else None
-    return ReceiptLineOut.model_validate(line).model_copy(update={"product_name": p.name if p else None})
+    return line_out(line, db.get(Product, line.product_id) if line.product_id else None)
+
+
+def _scan_product(db: Session, a: HouseholdAccess, body: ReceiptScanIn) -> scan.Resolved:
+    if body.product_id:
+        return scan.Resolved("linked", "", get_product(db, a.household.id, body.product_id))
+    try:
+        return scan.resolve(db, a.household.id, body.barcode or "")
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+
+
+def _unknown(db: Session, a: HouseholdAccess, r: Receipt, res: scan.Resolved) -> ReceiptScanOut:
+    from .products import lookup_barcode
+    return ReceiptScanOut(status="unknown", lookup=lookup_barcode(res.barcode, False, a, db),
+                          receipt=receipt_out(db, r, with_lines=True))
+
+
+def _scanned(db: Session, r: Receipt, res: scan.Resolved, line: ReceiptLine | None,
+             reason: str | None = None) -> ReceiptScanOut:
+    from .products import product_out
+    db.commit()
+    return ReceiptScanOut(status=res.status if line else "no_line", product=product_out(db, res.product),
+                          line_id=line.id if line else None, reason=reason, receipt=receipt_out(db, r, with_lines=True))
+
+
+@router.post("/{receipt_id}/lines/{line_id}/scan", response_model=ReceiptScanOut)
+def scan_line(receipt_id: str, line_id: str, body: ReceiptScanIn, a: HouseholdAccess = Depends(household_access),
+              db: Session = Depends(get_db)):
+    """This line is the pack just scanned. A barcode the household knows links its product; one the
+    databases know becomes a product first (no form). Unknown: status "unknown", the app asks what it
+    is, then sends the product_id."""
+    r = _get(db, a, receipt_id)
+    _editable(r)
+    line = _line(db, r, line_id)
+    res = _scan_product(db, a, body)
+    if res.product is None:
+        return _unknown(db, a, r, res)
+    scan.link(line, res.product)
+    return _scanned(db, r, res, line)
+
+
+@router.post("/{receipt_id}/scan", response_model=ReceiptScanOut)
+def scan_any(receipt_id: str, body: ReceiptScanIn, a: HouseholdAccess = Depends(household_access),
+             db: Session = Depends(get_db)):
+    """Scan them all: link the scanned product to the open line it most likely is (price paid last
+    time, the department's categories, its twin line, else the first open line), and say why."""
+    r = _get(db, a, receipt_id)
+    _editable(r)
+    res = _scan_product(db, a, body)
+    if res.product is None:
+        return _unknown(db, a, r, res)
+    line, reason = scan.pick_line(db, r, res.product)
+    if line is not None:
+        scan.link(line, res.product)
+    return _scanned(db, r, res, line, reason)
+
+
+@router.post("/{receipt_id}/lines/{line_id}/move", response_model=ReceiptOut)
+def move_link(receipt_id: str, line_id: str, body: ReceiptMoveIn, a: HouseholdAccess = Depends(household_access),
+              db: Session = Depends(get_db)):
+    """Wrong line: put this line's product on another line instead (this one becomes open again)."""
+    r = _get(db, a, receipt_id)
+    _editable(r)
+    src, dst = _line(db, r, line_id), _line(db, r, body.to_line_id)
+    if not src.product_id:
+        raise HTTPException(409, "That line has no product to move")
+    if src.id != dst.id:
+        dst.product_id, dst.matched_by = src.product_id, "scan"
+        dst.skip, dst.spending_only = False, False
+        src.product_id, src.matched_by = None, None
+    db.commit()
+    return receipt_out(db, r, with_lines=True)
 
 
 @router.delete("/{receipt_id}/lines/{line_id}", status_code=204)

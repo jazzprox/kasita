@@ -59,7 +59,7 @@ def test_receipt_read_review_confirm_and_learn(client, jazz, ai):
 
     c = client.post(f"/api/households/{hid}/receipts/{rid}/confirm", headers=h, json={})
     assert c.status_code == 200, c.text
-    assert c.json() == {"added": 2, "created_products": 1, "skipped": 1}
+    assert c.json() == {"added": 2, "created_products": 1, "skipped": 1, "spending_only": 0}
     # store created from the receipt, milk stock and price history recorded
     stores = client.get(f"/api/households/{hid}/stores", headers=h).json()
     assert [s["name"] for s in stores] == ["Centrum Piscadera"]
@@ -87,7 +87,7 @@ def test_review_edits(client, jazz, ai):
     r = client.post(base, headers=h, json={"raw_text": "BANANA", "quantity": 1.25, "line_total": 3.10}).json()
     assert r["line_count"] == 3
     c = client.post(f"/api/households/{hid}/receipts/{rid}/confirm", headers=h, json={}).json()
-    assert c == {"added": 2, "created_products": 2, "skipped": 1}
+    assert c == {"added": 2, "created_products": 2, "skipped": 1, "spending_only": 0}
     banana = [p for p in client.get(f"/api/households/{hid}/products", headers=h).json() if p["name"] == "Banana"][0]
     assert banana["unit"] == "kg"
 

@@ -249,6 +249,8 @@ class Receipt(Base):
     securo_transaction_id: Mapped[str | None] = mapped_column(String(64))
     uploaded_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    # when it was booked: spending-only lines count in the reports from then, like stock purchases do
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     lines: Mapped[list["ReceiptLine"]] = relationship(back_populates="receipt", cascade="all, delete-orphan",
                                                       order_by="ReceiptLine.position")
@@ -266,7 +268,12 @@ class ReceiptLine(Base):
     line_total: Mapped[Decimal | None] = mapped_column(Money)
     product_id: Mapped[str | None] = mapped_column(ForeignKey("products.id", ondelete="SET NULL"))
     skip: Mapped[bool] = mapped_column(Boolean, default=False)  # not a stock item (bag fee, deposit...)
-    matched_by: Mapped[str | None] = mapped_column(String(8))  # alias | guess | user
+    matched_by: Mapped[str | None] = mapped_column(String(8))  # alias | guess | user | scan
+    # a shop department ("COMESTIBELS", "FRUTA / BERDURA"), not a product: never remembered as an alias
+    department: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    # counts in spending under `spending_category`, but creates no product and no stock
+    spending_only: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    spending_category: Mapped[str | None] = mapped_column(String(80))
 
     receipt: Mapped[Receipt] = relationship(back_populates="lines")
 
@@ -280,6 +287,17 @@ class ReceiptAlias(Base):
     store_id: Mapped[str | None] = mapped_column(ForeignKey("stores.id", ondelete="CASCADE"))
     text_key: Mapped[str] = mapped_column(String(255))  # normalised receipt text
     product_id: Mapped[str] = mapped_column(ForeignKey("products.id", ondelete="CASCADE"))
+
+
+class ReceiptDepartment(Base):
+    """Learned: at this store, this receipt text is a department (it was linked to different
+    products on different lines), so it is never auto-linked from memory."""
+    __tablename__ = "receipt_departments"
+    __table_args__ = (UniqueConstraint("household_id", "store_id", "text_key"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    household_id: Mapped[str] = mapped_column(ForeignKey("households.id", ondelete="CASCADE"))
+    store_id: Mapped[str | None] = mapped_column(ForeignKey("stores.id", ondelete="CASCADE"))
+    text_key: Mapped[str] = mapped_column(String(255))  # normalised receipt text
 
 
 class Integration(Base):

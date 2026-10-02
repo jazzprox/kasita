@@ -13,7 +13,7 @@ import json
 import logging
 import re
 import uuid
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
 from difflib import SequenceMatcher
 from pathlib import Path
@@ -25,19 +25,28 @@ from sqlalchemy.orm import Session
 from ..config import settings
 from ..db import SessionLocal
 from ..models import Product, Receipt, ReceiptAlias, ReceiptLine, Store
-from . import categories, chatgpt, codex
+from . import categories, chatgpt, codex, departments
 from . import stock as stock_svc
 
 log = logging.getLogger(__name__)
 
 INSTRUCTIONS = """You read photos of shop receipts (mostly supermarkets in Curaçao) and reply with ONLY a JSON object, no prose, no code fences:
 {"store": string|null, "date": "YYYY-MM-DD"|null, "currency": string|null, "total": number|null,
- "lines": [{"text": string, "name": string, "quantity": number, "unit_price": number|null, "line_total": number|null, "kind": "item"|"fee"|"deposit"}]}
+ "lines": [{"text": string, "name": string, "quantity": number, "unit_price": number|null, "line_total": number|null, "kind": "item"|"department"|"fee"|"deposit"}]}
 
 - "text": the product line exactly as printed (abbreviations and all), without the price.
 - "name": a short, plain product name a person would write on a shopping list, in English, keeping the brand when it is printed, with size if printed (e.g. "Goisco toilet paper 12 rolls", "Whole milk 1 L").
 - "quantity": number of units bought; for weighed items the weight in kg. Default 1.
 - "line_total": what was paid for that line after any discount on that item. Fold item discounts / savings / "korting" lines into the item they belong to instead of listing them. Ignore discounts on the whole receipt.
+- kind "department": the line names a shop DEPARTMENT or product group instead of a product. Small shops
+  (Chinese minimarkets, snacks, toko's) ring items up by POS department key, so the line says what KIND of thing
+  was sold, never which product. Examples: "COMESTIBELS", "KOMESTIBEL", "FRUTA / BERDURA", "AROS / BONCHI",
+  "WEBU / ARINA", "BIBIDA", "KARNI", "LECHI / KESO", "SERBES", "LIMPIEZA" (Papiamentu); "COMESTIBLES",
+  "ABARROTES", "VIVERES", "FRUTAS Y VERDURAS", "CARNES", "BEBIDAS", "LACTEOS" (Spanish); "LEVENSMIDDELEN",
+  "KRUIDENIERS", "GROENTE / FRUIT", "VLEES", "ZUIVEL", "DRANKEN", "DIVERSEN" (Dutch); "GROCERY", "PRODUCE",
+  "DEPT 3", "MISC" (English). A brand, a size or a specific product ("LECHI KRIOYO 1L", "ARROZ BLANCO 5LB",
+  "BANANA") is an "item". For a department line, "name" is a plain description of the group in English
+  (e.g. "Fruit and vegetables", "Rice and beans", "Groceries").
 - Bag fees, bottle or crate deposits, service charges: kind "fee" or "deposit". Leave out subtotals, tax (OB) lines, payment method, change, loyalty points and cashier info.
 - "total": the amount paid for the whole receipt.
 - "currency": ISO code. NAf, ANG, Cg, XCG and "fl" all mean the Caribbean guilder: use "XCG". "$" or USD: "USD".
@@ -227,9 +236,33 @@ def apply_parsed(db: Session, receipt: Receipt, parsed: dict) -> None:
                            unit_price=unit, line_total=total, skip=raw.get("kind") in ("fee", "deposit"))
         receipt.lines.append(line)
         if not line.skip:
-            match_line(db, receipt, line, products)
+            line.department = is_department(db, receipt, line, ai_says=raw.get("kind") == "department")
+            if not line.department:
+                match_line(db, receipt, line, products)
     receipt.status = "parsed"
     receipt.error = None
+
+
+def _store_alias(db: Session, household_id: str, store_id: str | None, key: str) -> ReceiptAlias | None:
+    return db.scalar(select(ReceiptAlias).where(ReceiptAlias.household_id == household_id,
+                                                ReceiptAlias.store_id.is_(None) if store_id is None
+                                                else ReceiptAlias.store_id == store_id,
+                                                ReceiptAlias.text_key == key))
+
+
+def is_department(db: Session, receipt: Receipt, line: ReceiptLine, *, ai_says: bool = False) -> bool:
+    """Is this line a shop department ("COMESTIBELS") rather than a product? See services/departments.
+
+    Learned for this store wins; then a product this household taught for exactly this text at this
+    store (someone said "not a department" and booked it); then the AI's flag and the word list."""
+    key = text_key(line.raw_text)
+    if not key:
+        return False
+    if departments.learned(db, receipt.household_id, receipt.store_id, key):
+        return True
+    if receipt.store_id and _store_alias(db, receipt.household_id, receipt.store_id, key):
+        return False
+    return ai_says or departments.is_department_text(line.raw_text)
 
 
 def match_line(db: Session, receipt: Receipt, line: ReceiptLine, products: list[Product]) -> None:
@@ -276,7 +309,7 @@ def confirm(db: Session, receipt: Receipt, user_id: str | None, *, create_missin
             db.add(store)
             db.flush()
         receipt.store_id = store.id
-    added, created, skipped = 0, 0, 0
+    added, created, skipped, spending = 0, 0, 0, 0
     # What THIS receipt has already created, keyed the way aliases are keyed.
     #
     # A shop rings two of the same thing up as two lines of quantity 1, not
@@ -295,6 +328,16 @@ def confirm(db: Session, receipt: Receipt, user_id: str | None, *, create_missin
     for line in receipt.lines:
         if line.skip:
             skipped += 1
+            continue
+        key_raw = text_key(line.raw_text)
+        dept = line.department or bool(key_raw and departments.learned(db, hid, receipt.store_id, key_raw))
+        if dept and not line.product_id:
+            # a department nobody scanned: what it was is unknown, so it counts as spending only
+            line.spending_only = True
+        if line.spending_only:
+            line.product_id, line.matched_by = None, None
+            line.spending_category = line.spending_category or departments.default_category(line.raw_text, line.name)
+            spending += 1
             continue
         product = db.get(Product, line.product_id) if line.product_id else None
         if product is None or product.household_id != hid:
@@ -322,20 +365,27 @@ def confirm(db: Session, receipt: Receipt, user_id: str | None, *, create_missin
             unit_price = (line.line_total / line.quantity).quantize(Decimal("0.01"))
         stock_svc.purchase(db, hid, user_id, product, line.quantity, location_id=location_id, unit_price=unit_price,
                            store_id=receipt.store_id, purchased_at=receipt.purchased_on, receipt_line_id=line.id)
-        remember(db, hid, receipt.store_id, line.raw_text, product.id)
+        if dept:
+            departments.learn(db, hid, receipt.store_id, key_raw)  # next time it is known without the AI
+        else:
+            remember(db, hid, receipt.store_id, line.raw_text, product.id)
         added += 1
     receipt.status = "confirmed"
-    return {"added": added, "created_products": created, "skipped": skipped}
+    receipt.confirmed_at = datetime.now(timezone.utc)
+    return {"added": added, "created_products": created, "skipped": skipped, "spending_only": spending}
 
 
 def remember(db: Session, household_id: str, store_id: str | None, raw_text: str, product_id: str) -> None:
+    """Learn "this store prints this text for this product". The same text booked as a DIFFERENT
+    product means it is a department, not a product: it is then never auto-linked again."""
     key = text_key(raw_text)
     if not key:
         return
-    row = db.scalar(select(ReceiptAlias).where(ReceiptAlias.household_id == household_id,
-                                               ReceiptAlias.store_id.is_(None) if store_id is None
-                                               else ReceiptAlias.store_id == store_id,
-                                               ReceiptAlias.text_key == key))
+    row = _store_alias(db, household_id, store_id, key)
+    if row and row.product_id != product_id:
+        db.delete(row)
+        departments.learn(db, household_id, store_id, key)
+        return
     if row:
         row.product_id = product_id
     else:

@@ -12,7 +12,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..config import settings
-from ..models import Household, Location, Product, StockEntry, StockEvent, Store
+from ..models import Household, Location, Product, Receipt, ReceiptLine, StockEntry, StockEvent, Store
 
 
 def expiring(db: Session, household_id: str, today: date | None = None) -> dict[str, list[str]]:
@@ -63,6 +63,18 @@ def spending(db: Session, household_id: str, days: int = 7, until: datetime | No
         .where(StockEvent.household_id == household_id, StockEvent.kind == "purchase",
                StockEvent.unit_price.is_not(None), StockEvent.at >= since, StockEvent.at < until)
     ).all()
+    # receipt lines booked as "spending only" (a department nobody scanned, a meal out...): no stock, same report
+    lines = db.execute(
+        select(ReceiptLine.quantity, ReceiptLine.unit_price, ReceiptLine.line_total, ReceiptLine.spending_category,
+               Store.name)
+        .join(Receipt, Receipt.id == ReceiptLine.receipt_id)
+        .outerjoin(Store, Store.id == Receipt.store_id)
+        .where(Receipt.household_id == household_id, Receipt.status == "confirmed",
+               ReceiptLine.spending_only.is_(True), ReceiptLine.skip.is_(False),
+               Receipt.confirmed_at >= since, Receipt.confirmed_at < until)
+    ).all()
+    rows = list(rows) + [(Decimal(1), total, cat, store) if total is not None else (qty, price, cat, store)
+                         for qty, price, total, cat, store in lines if total is not None or price is not None]
     by_cat: dict[str, Decimal] = {}
     by_store: dict[str, Decimal] = {}
     total = Decimal(0)

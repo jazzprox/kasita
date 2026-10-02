@@ -158,7 +158,8 @@ def summary_note(db: Session, receipt: Receipt) -> str:
         if line.skip or line.line_total is None:
             continue
         product = db.get(Product, line.product_id) if line.product_id else None
-        cat = (product.category if product and product.category else "Other").split(",")[0].strip()[:30]
+        cat = (product.category if product and product.category
+               else line.spending_category or "Other").split(",")[0].strip()[:30]
         totals[cat] = totals.get(cat, Decimal(0)) + line.line_total
         items += 1
     parts = ", ".join(f"{k} {v:.2f}" for k, v in sorted(totals.items(), key=lambda kv: -kv[1]))

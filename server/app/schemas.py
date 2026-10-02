@@ -297,8 +297,13 @@ class ReceiptLineOut(ORM):
     line_total: Decimal | None
     product_id: str | None
     product_name: str | None = None
+    product_image_url: str | None = None
     skip: bool
-    matched_by: str | None
+    matched_by: str | None  # alias | guess | user | scan
+    department: bool = False  # a shop department ("COMESTIBELS"): scan the pack to say what it was
+    spending_only: bool = False  # counts in spending, no product or stock
+    spending_category: str | None = None
+    suggested_category: str | None = None  # default for spending only, from the department's words
 
 
 class ReceiptOut(BaseModel):
@@ -331,6 +336,8 @@ class ReceiptLineIn(BaseModel):
     line_total: Decimal | None = None
     product_id: str | None = None
     skip: bool = False
+    spending_only: bool = False
+    spending_category: str | None = Field(default=None, max_length=80)
 
 
 class ReceiptLinePatch(BaseModel):
@@ -341,6 +348,27 @@ class ReceiptLinePatch(BaseModel):
     product_id: str | None = None
     clear_product: bool = False  # unlink the product (a new one is created on confirm)
     skip: bool | None = None
+    spending_only: bool | None = None
+    spending_category: str | None = Field(default=None, max_length=80)
+    department: bool | None = None  # False: "this is a real product name", remembered like any other
+
+
+class ReceiptScanIn(BaseModel):
+    barcode: str | None = None     # scanned code: the household's product, or one made from the databases
+    product_id: str | None = None  # or a product chosen/created in the app (after an unknown barcode)
+
+
+class ReceiptMoveIn(BaseModel):
+    to_line_id: str
+
+
+class ReceiptScanOut(BaseModel):
+    status: str  # known | created | linked | unknown (lookup says what is known) | no_line (nothing open)
+    product: ProductOut | None = None
+    line_id: str | None = None
+    reason: str | None = None  # why this line was chosen, e.g. "same price as last time"
+    lookup: BarcodeLookupOut | None = None
+    receipt: ReceiptOut
 
 
 class ConfirmIn(BaseModel):
@@ -352,6 +380,7 @@ class ConfirmOut(BaseModel):
     added: int
     created_products: int
     skipped: int
+    spending_only: int = 0
 
 
 # --- integrations ---------------------------------------------------------------
