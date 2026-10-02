@@ -166,22 +166,56 @@ class Member {
 
 class ReceiptLine {
   final String id, rawText;
-  final String? name, productId, productName, matchedBy;
+  final String? name, productId, productName, productImageUrl, matchedBy, spendingCategory, suggestedCategory;
   final double quantity;
   final double? unitPrice, lineTotal;
   final bool skip;
+
+  /// A shop department ("COMESTIBELS"), not a product: scan the pack to say what it was.
+  final bool department;
+
+  /// Counts in spending under [spendingCategory]; no product, no stock.
+  final bool spendingOnly;
   ReceiptLine.fromJson(Map<String, dynamic> j)
     : id = j['id'],
       rawText = j['raw_text'],
       name = j['name'],
       productId = j['product_id'],
       productName = j['product_name'],
+      productImageUrl = j['product_image_url'],
       matchedBy = j['matched_by'],
       quantity = _num(j['quantity']),
       unitPrice = _numOrNull(j['unit_price']),
       lineTotal = _numOrNull(j['line_total']),
-      skip = j['skip'] ?? false;
+      skip = j['skip'] ?? false,
+      department = j['department'] ?? false,
+      spendingOnly = j['spending_only'] ?? false,
+      spendingCategory = j['spending_category'],
+      suggestedCategory = j['suggested_category'];
   String get label => name ?? rawText;
+
+  /// What to call it: the scanned product's real name beats a department or a guessed name.
+  String get title => productName != null && (matchedBy == 'scan' || department) ? productName! : label;
+
+  /// Still to be said what it is (a guess counts as open).
+  bool get open => !skip && !spendingOnly && (productId == null || matchedBy == 'guess');
+}
+
+/// What a receipt scan did: which product, on which line, and why that line.
+class ReceiptScanResult {
+  final String status; // known | created | linked | unknown | no_line
+  final Product? product;
+  final String? lineId, reason;
+  final BarcodeResult? lookup;
+  final Receipt receipt;
+  ReceiptScanResult.fromJson(Map<String, dynamic> j)
+    : status = j['status'],
+      product = j['product'] == null ? null : Product.fromJson(j['product']),
+      lineId = j['line_id'],
+      reason = j['reason'],
+      lookup = j['lookup'] == null ? null : BarcodeResult.fromJson(j['lookup']),
+      receipt = Receipt.fromJson(j['receipt']);
+  ReceiptLine? get line => receipt.lines?.where((l) => l.id == lineId).firstOrNull;
 }
 
 class Receipt {

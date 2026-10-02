@@ -306,6 +306,23 @@ class Api {
       Receipt.fromJson(await patch('${_h(hid)}/receipts/$id', body));
   Future<void> updateReceiptLine(String hid, String id, String lineId, Map<String, dynamic> body) =>
       patch('${_h(hid)}/receipts/$id/lines/$lineId', body);
+
+  /// The pack just scanned is this line ([lineId]), or (scan them all) whichever open line fits best.
+  /// Send [barcode], or [productId] after an unknown barcode was named in the app.
+  Future<ReceiptScanResult> scanForReceipt(
+    String hid,
+    String id, {
+    String? lineId,
+    String? barcode,
+    String? productId,
+  }) async => ReceiptScanResult.fromJson(
+    await post('${_h(hid)}/receipts/$id/${lineId == null ? '' : 'lines/$lineId/'}scan', {
+      'barcode': barcode,
+      'product_id': productId,
+    }),
+  );
+  Future<Receipt> moveReceiptLink(String hid, String id, String lineId, String toLineId) async =>
+      Receipt.fromJson(await post('${_h(hid)}/receipts/$id/lines/$lineId/move', {'to_line_id': toLineId}));
   Future<void> addReceiptLine(String hid, String id, Map<String, dynamic> body) =>
       post('${_h(hid)}/receipts/$id/lines', body);
   Future<void> deleteReceiptLine(String hid, String id, String lineId) =>

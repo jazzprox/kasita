@@ -11,6 +11,7 @@ import '../models.dart';
 import '../widgets.dart';
 import 'chatgpt.dart';
 import 'product_picker.dart';
+import 'receipt_scan.dart';
 import 'securo.dart';
 
 final _money = NumberFormat('#,##0.00');
@@ -314,20 +315,30 @@ class _ReceiptReviewScreenState extends State<ReceiptReviewScreen> {
   Future<void> _confirm() => _run(() async {
     final s = Kasita.read(context);
     final r = _r!;
-    final unmatched = r.lines!.where((l) => !l.skip && l.productId == null).length;
-    if (unmatched > 0) {
+    final unmatched = r.lines!.where((l) => !l.skip && !l.spendingOnly && !l.department && l.productId == null).length;
+    final departments = r.lines!.where((l) => !l.skip && !l.spendingOnly && l.department && l.productId == null).length;
+    if (unmatched > 0 || departments > 0) {
       final ok = await showDialog<bool>(
         context: context,
         builder: (c) => AlertDialog(
-          title: const Text('Create new products?'),
+          title: Text(unmatched > 0 ? 'Create new products?' : 'Count them as spending?'),
           content: Text(
-            '$unmatched line${unmatched == 1 ? '' : 's'} are not linked to a product yet. '
-            'Kasita will create ${unmatched == 1 ? 'a product' : 'products'} named as shown. '
-            'Skip lines that are not groceries.',
+            [
+              if (unmatched > 0)
+                '$unmatched line${unmatched == 1 ? '' : 's'} are not linked to a product yet. '
+                    'Kasita will create ${unmatched == 1 ? 'a product' : 'products'} named as shown. '
+                    'Skip lines that are not groceries.',
+              if (departments > 0)
+                '$departments department line${departments == 1 ? '' : 's'} (like COMESTIBELS) not scanned: '
+                    '${departments == 1 ? 'it counts' : 'they count'} as spending only, nothing goes in the pantry.',
+            ].join('\n\n'),
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Back')),
-            FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Create and add')),
+            FilledButton(
+              onPressed: () => Navigator.pop(c, true),
+              child: Text(unmatched > 0 ? 'Create and add' : 'Add'),
+            ),
           ],
         ),
       );
@@ -337,7 +348,12 @@ class _ReceiptReviewScreenState extends State<ReceiptReviewScreen> {
     s.changed();
     await s.reloadStores();
     if (!mounted) return;
-    toast(context, 'Added ${res['added']} item${res['added'] == 1 ? '' : 's'} to the pantry');
+    final spent = res['spending_only'] ?? 0;
+    toast(
+      context,
+      'Added ${res['added']} item${res['added'] == 1 ? '' : 's'} to the pantry'
+      '${spent == 0 ? '' : ', $spent as spending only'}',
+    );
     Navigator.pop(context);
   });
 
@@ -435,6 +451,25 @@ class _ReceiptReviewScreenState extends State<ReceiptReviewScreen> {
     if (changed == true) await _load();
   }
 
+  /// A department line nobody scanned yet: the quick choices, scanning first. Anything else: the editor.
+  Future<void> _tapLine(ReceiptLine line) async {
+    if (!(line.department && line.open)) return _editLine(line);
+    final done = await receiptLineActions(context, widget.receiptId, line);
+    if (!mounted) return;
+    if (done == LineAction.edit) return _editLine(line);
+    if (done == LineAction.changed) await _load();
+  }
+
+  Future<void> _scanLine(ReceiptLine line) async {
+    if (await scanReceiptLine(context, widget.receiptId, line)) await _load();
+  }
+
+  Future<void> _scanAll() async {
+    await Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => ReceiptScanAllScreen(receiptId: widget.receiptId)));
+    if (mounted) await _load();
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = Kasita.of(context);
@@ -457,7 +492,7 @@ class _ReceiptReviewScreenState extends State<ReceiptReviewScreen> {
                 child: FilledButton.icon(
                   onPressed: _busy ? null : _confirm,
                   icon: const Icon(Icons.kitchen),
-                  label: Text('Add ${r.lines!.where((l) => !l.skip).length} items to the pantry'),
+                  label: Text('Add ${r.lines!.where(_toPantry).length} items to the pantry'),
                 ),
               ),
             )
@@ -570,15 +605,29 @@ class _ReceiptReviewScreenState extends State<ReceiptReviewScreen> {
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
                     child: Text(
-                      'Check the lines: tap one to link it to a product or skip it. '
+                      'Check the lines: tap one to link it to a product, skip it or count it as spending only. '
+                      'Shop departments like COMESTIBELS say nothing about the product: scan the pack. '
                       'Kasita remembers your choices for the next receipt from this store.',
                       style: t.textTheme.bodySmall,
+                    ),
+                  ),
+                if (r.status == 'parsed' && r.lines!.any((l) => l.open))
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                    child: FilledButton.tonalIcon(
+                      onPressed: _busy ? null : _scanAll,
+                      icon: const Icon(Icons.qr_code_scanner),
+                      label: const Text('Scan them all'),
                     ),
                   ),
                 if ((r.status == 'parsed' || r.status == 'confirmed') && r.total != null)
                   SecuroPaymentSection(receipt: r, onChanged: (updated) => setState(() => _r = updated)),
                 for (final l in r.lines ?? const <ReceiptLine>[])
-                  _LineTile(line: l, onTap: editable ? () => _editLine(l) : null),
+                  _LineTile(
+                    line: l,
+                    onTap: editable ? () => _tapLine(l) : null,
+                    onScan: editable && !l.skip && !l.spendingOnly ? () => _scanLine(l) : null,
+                  ),
                 if (editable && !r.reading && r.status == 'parsed')
                   ListTile(
                     leading: const Icon(Icons.add),
@@ -594,8 +643,8 @@ class _ReceiptReviewScreenState extends State<ReceiptReviewScreen> {
 
 class _LineTile extends StatelessWidget {
   final ReceiptLine line;
-  final VoidCallback? onTap;
-  const _LineTile({required this.line, this.onTap});
+  final VoidCallback? onTap, onScan;
+  const _LineTile({required this.line, this.onTap, this.onScan});
 
   @override
   Widget build(BuildContext context) {
@@ -603,9 +652,16 @@ class _LineTile extends StatelessWidget {
     final l = line;
     final (icon, color, note) = l.skip
         ? (Icons.remove_circle_outline, t.colorScheme.outline, 'skipped')
+        : l.spendingOnly
+        ? (Icons.payments_outlined, t.colorScheme.secondary, 'spending only · ${l.spendingCategory ?? 'Other'}')
+        : l.department && l.productId == null
+        ? (Icons.qr_code_scanner, Colors.orange.shade800, 'department · scan it')
         : switch (l.matchedBy) {
-            'alias' => (Icons.check_circle_outline, t.colorScheme.primary, l.productName ?? ''),
-            'user' => (Icons.check_circle_outline, t.colorScheme.primary, l.productName ?? ''),
+            'alias' || 'user' || 'scan' => (
+              Icons.check_circle_outline,
+              t.colorScheme.primary,
+              l.title == l.productName ? 'scanned' : l.productName ?? '',
+            ),
             'guess' => (Icons.help_outline, Colors.orange.shade800, '${l.productName}? check'),
             _ => (Icons.add_circle_outline, t.colorScheme.tertiary, 'new product'),
           };
@@ -613,21 +669,36 @@ class _LineTile extends StatelessWidget {
       onTap: onTap,
       leading: Icon(icon, color: color),
       title: Text(
-        l.label,
+        l.title,
         style: l.skip ? TextStyle(decoration: TextDecoration.lineThrough, color: t.colorScheme.outline) : null,
       ),
       subtitle: Text('${l.rawText}  ·  $note', maxLines: 1, overflow: TextOverflow.ellipsis),
-      trailing: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.end,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Text(money(l.lineTotal), style: t.textTheme.bodyLarge),
-          if (l.quantity != 1) Text('${fmtQty(l.quantity)} × ${money(l.unitPrice)}', style: t.textTheme.bodySmall),
+          Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(money(l.lineTotal), style: t.textTheme.bodyLarge),
+              if (l.quantity != 1) Text('${fmtQty(l.quantity)} × ${money(l.unitPrice)}', style: t.textTheme.bodySmall),
+            ],
+          ),
+          if (onScan != null)
+            IconButton(
+              tooltip: 'Scan the pack',
+              icon: const Icon(Icons.qr_code_scanner),
+              color: l.department && l.productId == null ? Colors.orange.shade800 : null,
+              onPressed: onScan,
+            ),
         ],
       ),
     );
   }
 }
+
+/// Goes into the pantry when the receipt is added (an unscanned department counts as spending only).
+bool _toPantry(ReceiptLine l) => !l.skip && !l.spendingOnly && !(l.department && l.productId == null);
 
 /// Edit one receipt line: which product it is, amount and price, or skip it.
 class _LineEditor extends StatefulWidget {
@@ -646,8 +717,13 @@ class _LineEditorState extends State<_LineEditor> {
   );
   late String? _productId = widget.line?.productId;
   late String? _productName = widget.line?.productName;
+  late String? _savedProductId = widget.line?.productId; // what the server has (a scan links right away)
   late bool _skip = widget.line?.skip ?? false;
+  late bool _spendingOnly = widget.line?.spendingOnly ?? false;
+  late String _category = widget.line?.spendingCategory ?? widget.line?.suggestedCategory ?? 'Other';
+  late bool _department = widget.line?.department ?? false;
   bool _busy = false;
+  bool _scanned = false;
 
   double? _n(String v) => double.tryParse(v.replaceAll(',', '.').trim());
 
@@ -663,6 +739,36 @@ class _LineEditorState extends State<_LineEditor> {
     }
   }
 
+  /// Scan the pack: the server links it at once (making the product from the barcode if needed).
+  Future<void> _scan() async {
+    final line = widget.line!;
+    final code = await Navigator.of(context)
+        .push<String>(MaterialPageRoute(builder: (_) => ScanOneBarcodeScreen(title: 'Scan: ${line.rawText}')));
+    if (code == null || code.isEmpty || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      final res = await scanToReceipt(context, widget.receiptId, code, lineId: line.id);
+      if (res?.product == null || !mounted) return;
+      Kasita.read(context).changed();
+      setState(() {
+        _productId = _savedProductId = res!.product!.id;
+        _productName = res.product!.name;
+        _skip = _spendingOnly = false;
+        _scanned = true;
+      });
+      toast(context, '${res!.product!.name}${res.status == 'created' ? ': new product from the barcode' : ''}');
+    } on ApiException catch (e) {
+      if (mounted) toast(context, e.message, error: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _pickCategory() async {
+    final c = await pickCategory(context, _category);
+    if (c != null && mounted) setState(() => _category = c);
+  }
+
   Future<void> _save() async {
     final s = Kasita.read(context);
     final qty = _n(_qty.text) ?? 1;
@@ -676,8 +782,10 @@ class _LineEditorState extends State<_LineEditor> {
           'quantity': qty,
           'line_total': total,
           'unit_price': total == null ? null : double.parse((total / qty).toStringAsFixed(2)),
-          'product_id': _productId,
+          'product_id': _spendingOnly ? null : _productId,
           'skip': _skip,
+          'spending_only': _spendingOnly,
+          if (_spendingOnly) 'spending_category': _category,
         });
       } else {
         await s.api.updateReceiptLine(s.hid, widget.receiptId, widget.line!.id, {
@@ -686,8 +794,11 @@ class _LineEditorState extends State<_LineEditor> {
           'line_total': total,
           'unit_price': total == null ? null : double.parse((total / qty).toStringAsFixed(2)),
           'skip': _skip,
-          if (_productId != null && _productId != widget.line!.productId) 'product_id': _productId,
-          if (_productId == null && widget.line!.productId != null) 'clear_product': true,
+          'spending_only': _spendingOnly,
+          if (_spendingOnly) 'spending_category': _category,
+          if (_department != widget.line!.department) 'department': _department,
+          if (!_spendingOnly && _productId != null && _productId != _savedProductId) 'product_id': _productId,
+          if (_productId == null && _savedProductId != null) 'clear_product': true,
         });
       }
       if (mounted) Navigator.pop(context, true);
@@ -715,6 +826,14 @@ class _LineEditorState extends State<_LineEditor> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (line != null) Text('On the receipt: ${line.rawText}', style: Theme.of(context).textTheme.bodySmall),
+            if (line != null && _department && _productId == null && !_spendingOnly)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  'A shop department, not a product: scan the pack to say what it was.',
+                  style: TextStyle(color: Colors.orange.shade800, fontSize: 12),
+                ),
+              ),
             const SizedBox(height: 8),
             TextField(
               controller: _name,
@@ -741,38 +860,76 @@ class _LineEditorState extends State<_LineEditor> {
               ],
             ),
             const SizedBox(height: 12),
-            ListTile(
+            if (!_spendingOnly)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.inventory_2_outlined),
+                title: Text(_productName ?? (_department ? 'Not scanned yet' : 'New product')),
+                subtitle: Text(
+                  _productId != null
+                      ? (_scanned ? 'Scanned: this line is this product' : 'This line is this product')
+                      : _department
+                      ? 'Not scanned: it counts as spending only'
+                      : 'Created from the name above when you add the receipt',
+                ),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_productId != null)
+                      IconButton(
+                        tooltip: 'Unlink',
+                        icon: const Icon(Icons.close),
+                        onPressed: () => setState(() {
+                          _productId = null;
+                          _productName = null;
+                        }),
+                      ),
+                    if (line != null)
+                      IconButton(
+                        tooltip: 'Scan the pack',
+                        icon: const Icon(Icons.qr_code_scanner),
+                        onPressed: _busy ? null : _scan,
+                      ),
+                    TextButton(onPressed: _chooseProduct, child: const Text('Choose')),
+                  ],
+                ),
+              ),
+            SwitchListTile(
               contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.inventory_2_outlined),
-              title: Text(_productName ?? 'New product'),
-              subtitle: Text(
-                _productId == null
-                    ? 'Created from the name above when you add the receipt'
-                    : 'This line is this product',
-              ),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (_productId != null)
-                    IconButton(
-                      tooltip: 'Make it a new product',
-                      icon: const Icon(Icons.close),
-                      onPressed: () => setState(() {
-                        _productId = null;
-                        _productName = null;
-                      }),
-                    ),
-                  TextButton(onPressed: _chooseProduct, child: const Text('Choose')),
-                ],
-              ),
+              title: const Text('Spending only'),
+              subtitle: const Text('Counts in spending, nothing goes in the pantry'),
+              value: _spendingOnly,
+              onChanged: (v) => setState(() {
+                _spendingOnly = v;
+                if (v) _skip = false;
+              }),
             ),
+            if (_spendingOnly)
+              ListTile(
+                contentPadding: const EdgeInsets.only(left: 16),
+                leading: const Icon(Icons.category_outlined),
+                title: Text(_category),
+                subtitle: const Text('Category in spending'),
+                trailing: TextButton(onPressed: _pickCategory, child: const Text('Change')),
+              ),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('Skip this line'),
-              subtitle: const Text('Not something to keep in stock (bag, deposit, non-grocery)'),
+              subtitle: const Text('Not counted anywhere (bag, deposit)'),
               value: _skip,
-              onChanged: (v) => setState(() => _skip = v),
+              onChanged: (v) => setState(() {
+                _skip = v;
+                if (v) _spendingOnly = false;
+              }),
             ),
+            if (line != null && (line.department || _department))
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Shop department'),
+                subtitle: const Text('Like COMESTIBELS: never remembered as one product. Off: a real product name'),
+                value: _department,
+                onChanged: (v) => setState(() => _department = v),
+              ),
             const SizedBox(height: 8),
             Row(
               children: [
