@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- In-app updates: only the downloaded APKs in cache/updates/ are shared, with the package installer. -->
+<paths>
+    <cache-path name="updates" path="updates/"/>
+</paths>

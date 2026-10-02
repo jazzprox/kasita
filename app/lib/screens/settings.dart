@@ -5,6 +5,7 @@ import '../api.dart';
 import '../main.dart';
 import '../models.dart';
 import '../nearby/nearby.dart';
+import '../updates/update_ui.dart';
 import '../widgets.dart';
 import 'activity.dart';
 import 'bills.dart';
@@ -224,6 +225,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onTap: _invite,
             ),
           const Divider(),
+          const UpdateSettingsTiles(),
           ListTile(leading: const Icon(Icons.dns_outlined), title: const Text('Server'), subtitle: Text(s.api.server)),
           ListTile(
             leading: const Icon(Icons.password),

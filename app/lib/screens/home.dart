@@ -13,6 +13,8 @@ import '../api.dart';
 import '../home_widget_sync.dart';
 import '../main.dart';
 import '../spoken_list.dart';
+import '../updates/update_ui.dart';
+import '../updates/updater.dart';
 import '../widgets.dart';
 import 'products.dart';
 import 'scan.dart';
@@ -28,10 +30,12 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _tab = 0;
   StreamSubscription<List<SharedMediaFile>>? _shareSub;
+  AppLifecycleListener? _lifecycle;
 
   @override
   void dispose() {
     _shareSub?.cancel();
+    _lifecycle?.dispose();
     super.dispose();
   }
 
@@ -86,6 +90,11 @@ class _HomeScreenState extends State<HomeScreen> {
     _shareSub = ReceiveSharingIntent.instance.getMediaStream().listen(_shared);
     final st = Kasita.read(context);
     ensureWidgetKey(st.api, st.hid);
+    // a new build on GitHub? at start, then on resume at most every 6 hours
+    if (updatesSupported) {
+      updater.start();
+      _lifecycle = AppLifecycleListener(onResume: updater.maybeCheck);
+    }
     actions.setShortcutItems(const [
       ShortcutItem(type: 'pass', localizedTitle: 'Pantry pass'),
       ShortcutItem(type: 'receipt', localizedTitle: 'Scan receipt'),
@@ -130,18 +139,32 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
             const VerticalDivider(width: 1),
-            Expanded(child: _page()),
+            Expanded(
+              child: Column(
+                children: [
+                  Expanded(child: _page()),
+                  const SafeArea(top: false, child: UpdateBanner()),
+                ],
+              ),
+            ),
           ],
         ),
       );
     }
     return Scaffold(
       body: _page(),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _tab,
-        onDestinationSelected: (i) => setState(() => _tab = i),
-        destinations: [
-          for (final d in _destinations) NavigationDestination(icon: Icon(d.$1), selectedIcon: Icon(d.$2), label: d.$3),
+      bottomNavigationBar: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const UpdateBanner(),
+          NavigationBar(
+            selectedIndex: _tab,
+            onDestinationSelected: (i) => setState(() => _tab = i),
+            destinations: [
+              for (final d in _destinations)
+                NavigationDestination(icon: Icon(d.$1), selectedIcon: Icon(d.$2), label: d.$3),
+            ],
+          ),
         ],
       ),
     );

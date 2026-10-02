@@ -53,6 +53,8 @@ dependencies:
   # the map of where you shop (OpenStreetMap tiles)
   flutter_map: ^8.3.2
   latlong2: ^0.10.1
+  # in-app updates (Android): own build number vs the latest GitHub release
+  package_info_plus: ^10.2.2
 
 dev_dependencies:
   flutter_test:
