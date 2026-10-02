@@ -81,7 +81,12 @@ class _LoginScreenState extends State<LoginScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Icon(Icons.house_rounded, size: 56, color: t.colorScheme.primary),
+                  Center(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: Image.asset('assets/brand/kasita.png', width: 72, height: 72),
+                    ),
+                  ),
                   const SizedBox(height: 8),
                   Text('Kasita', textAlign: TextAlign.center, style: t.textTheme.headlineMedium),
                   const SizedBox(height: 24),

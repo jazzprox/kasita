@@ -78,6 +78,10 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  # The app icon ("basket house"), also used as the logo on sign-in and the side rail.
+  assets:
+    - assets/brand/kasita.png
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg

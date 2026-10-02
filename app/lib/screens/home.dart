@@ -131,7 +131,10 @@ class _HomeScreenState extends State<HomeScreen> {
               labelType: NavigationRailLabelType.all,
               leading: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Icon(Icons.house_rounded, color: Theme.of(context).colorScheme.primary, size: 32),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.asset('assets/brand/kasita.png', width: 36, height: 36),
+                ),
               ),
               destinations: [
                 for (final d in _destinations)
