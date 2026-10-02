@@ -3,6 +3,15 @@
     <uses-permission android:name="android.permission.CAMERA"/>
     <!-- voice add on the shopping list -->
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <!-- "You're near a store" reminders (off until switched on in the app): OS geofences need
+         location, "all the time" so Android can wake Kasita at a store, and re-adding the
+         fences after a restart; the reminder itself is a local notification. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"/>
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
         android:label="Kasita"
         android:name="${applicationName}"
@@ -53,6 +62,17 @@
             </intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/kasita_widget_info"/>
         </receiver>
+        <!-- native_geofence: geofence events, re-register after reboot, optional foreground work -->
+        <receiver android:name="com.chunkytofustudios.native_geofence.receivers.NativeGeofenceBroadcastReceiver"
+                  android:exported="true"/>
+        <receiver android:name="com.chunkytofustudios.native_geofence.receivers.NativeGeofenceRebootBroadcastReceiver"
+                  android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+            </intent-filter>
+        </receiver>
+        <service android:name="com.chunkytofustudios.native_geofence.NativeGeofenceForegroundService"
+                 android:permission="android.permission.BIND_JOB_SERVICE" android:exported="true"/>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

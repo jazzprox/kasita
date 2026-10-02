@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'api.dart';
 import 'home_widget_sync.dart';
 import 'models.dart';
+import 'nearby/nearby.dart';
 
 /// App-wide state: who's signed in, which household is active, and the
 /// household's reference data (locations, stores) that most screens need.
@@ -55,6 +56,7 @@ class AppState extends ChangeNotifier {
     stores = await api.stores(h.id);
     revision++;
     notifyListeners();
+    refreshNearby(api, h.id, stores); // store reminders: fresh list and fences (when switched on)
   }
 
   Future<void> reloadStores() async {
@@ -69,6 +71,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> signOut() async {
     await clearWidget();
+    await disableNearby();
     await api.logout();
     households = [];
     household = null;

@@ -4,10 +4,12 @@ import 'package:flutter/services.dart';
 import '../api.dart';
 import '../main.dart';
 import '../models.dart';
+import '../nearby/nearby.dart';
 import '../widgets.dart';
 import 'activity.dart';
 import 'bills.dart';
 import 'chatgpt.dart';
+import 'nearby.dart';
 import 'receipts.dart';
 import 'recipes.dart';
 import 'securo.dart';
@@ -169,6 +171,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
             subtitle: const Text('Address, phone and CRIB, filled in from receipts'),
             onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const StoresScreen())),
           ),
+          if (nearbySupported)
+            ListTile(
+              leading: const Icon(Icons.near_me_outlined),
+              title: const Text('Near a store'),
+              subtitle: const Text('A reminder when you pass a store where your list is cheapest'),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const NearbyScreen())),
+            ),
           ListTile(
             leading: const Icon(Icons.auto_awesome_outlined),
             title: const Text('ChatGPT'),

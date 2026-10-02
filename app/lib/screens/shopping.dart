@@ -10,6 +10,7 @@ import '../prefs.dart';
 import '../home_widget_sync.dart';
 import '../spoken_list.dart';
 import '../models.dart';
+import '../nearby/nearby.dart';
 import '../widgets.dart';
 
 class ShoppingScreen extends StatefulWidget {
@@ -166,6 +167,7 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
             if (p['hint'] != null) p['id'] as String: p['hint'] as String,
         };
       });
+      refreshNearby(s.api, s.hid, s.stores, prices: prices); // what the store reminders use
     } catch (_) {}
   }
 
