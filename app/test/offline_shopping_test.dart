@@ -25,12 +25,15 @@ class FakeApi extends Api {
     log.add('add $name');
   }
 
+  final ticks = <String, (DateTime, String?)>{};
+
   @override
-  Future<void> setShoppingDone(String hid, String id, bool done) async {
+  Future<void> setShoppingDone(String hid, String id, bool done, {DateTime? at, String? storeId}) async {
     _check();
     if (!items.containsKey(id)) throw ApiException(404, 'Item not found');
     items[id] = items[id]!.copyWith(done: done);
     log.add('done $id $done');
+    if (at != null) ticks[id] = (at, storeId);
   }
 
   @override
@@ -71,6 +74,21 @@ void main() {
     expect(await off.flush(), isTrue);
     expect(api.log, ['add milk', 'done srv-0 true', 'add bread', 'done srv-1 true']);
     expect(api.items.values.every((i) => i.done), isTrue);
+  });
+
+  test('an offline tick reaches the server with its own time and store', () async {
+    final api = FakeApi();
+    await api.addShopping('h', name: 'milk');
+    final off = OfflineShopping(api, 'h');
+    api.online = false;
+    final at = DateTime.utc(2026, 10, 3, 14, 5);
+    await off.enqueue({'op': 'done', 'id': 'srv-0', 'done': true, 'at': at.toIso8601String(), 'store_id': 'goisco'});
+    await off.enqueue({'op': 'add', 'id': 'local-1', 'name': 'bread', 'quantity': 1});
+    await off.enqueue({'op': 'done', 'id': 'local-1', 'done': true, 'at': at.add(const Duration(minutes: 2)).toIso8601String()});
+    api.online = true;
+    expect(await off.flush(), isTrue);
+    expect(api.ticks['srv-0'], (at, 'goisco'));
+    expect(api.ticks['srv-1']!.$1, at.add(const Duration(minutes: 2))); // the folded add keeps its tick time
   });
 
   test('a change the server rejects is dropped, not retried forever', () async {

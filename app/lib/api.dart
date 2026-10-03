@@ -313,7 +313,27 @@ class Api {
           .toList();
   Future<void> addShopping(String hid, {String? name, String? productId, double quantity = 1}) =>
       post('${_h(hid)}/shopping', {'name': name, 'product_id': productId, 'quantity': quantity});
-  Future<void> setShoppingDone(String hid, String id, bool done) => patch('${_h(hid)}/shopping/$id', {'done': done});
+  /// Tick or untick. A tick carries when it happened (an offline tick is sent later with its own time),
+  /// the phone's calendar day and, when known, the store you're in: Kasita learns each store's walk from it.
+  Future<void> setShoppingDone(String hid, String id, bool done, {DateTime? at, String? storeId}) {
+    final when = at ?? DateTime.now();
+    return patch('${_h(hid)}/shopping/$id', {
+      'done': done,
+      if (done) 'ticked_at': when.toUtc().toIso8601String(),
+      if (done) 'local_day': when.toLocal().toIso8601String().substring(0, 10),
+      if (done && storeId != null) 'store_id': storeId,
+    });
+  }
+
+  /// The open list's place in your walk through a store: {store_id, store, trips, rank: {item id: 0..1 | null}, stores}.
+  Future<Map<String, dynamic>> shoppingRoute(String hid, {String? storeId}) async => Map<String, dynamic>.from(
+    await get('${_h(hid)}/shopping/route', storeId == null ? null : {'store_id': storeId}),
+  );
+
+  /// A month of groceries in Securo next to Kasita's receipts ("2026-09"; null = this month).
+  Future<Map<String, dynamic>> securoGroceries(String hid, {String? month}) async => Map<String, dynamic>.from(
+    await get('${_h(hid)}/integrations/securo/groceries', month == null ? null : {'month': month}),
+  );
   Future<void> deleteShopping(String hid, String id) => delete('${_h(hid)}/shopping/$id');
   Future<void> clearDone(String hid) => post('${_h(hid)}/shopping/clear-done');
   Future<void> refill(String hid) => post('${_h(hid)}/shopping/refill');

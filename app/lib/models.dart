@@ -162,11 +162,13 @@ class BarcodeResult {
 }
 
 class PricePoint {
-  final DateTime at;
+  final DateTime at; // booked
+  final DateTime on; // bought (the receipt's date)
   final double unitPrice, quantity;
   final String? storeName;
   PricePoint.fromJson(Map<String, dynamic> j)
     : at = _date(j['at']) ?? DateTime.now(),
+      on = _date(j['on']) ?? (_date(j['at']) ?? DateTime.now()).toLocal(),
       unitPrice = _num(j['unit_price']),
       quantity = _num(j['quantity']),
       storeName = j['store_name'];

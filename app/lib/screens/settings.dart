@@ -16,6 +16,7 @@ import 'nearby.dart';
 import 'receipts.dart';
 import 'recipes.dart';
 import 'securo.dart';
+import 'securo_month.dart';
 import 'spending.dart';
 import 'stores.dart';
 
@@ -167,6 +168,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: const Text('Spending'),
             subtitle: const Text('What groceries cost, per category and store'),
             onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SpendingScreen())),
+          ),
+          ListTile(
+            leading: const Icon(Icons.fact_check_outlined),
+            title: const Text('Groceries in Securo'),
+            subtitle: const Text('Each month: what you paid, and which payments have a receipt'),
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SecuroMonthScreen())),
           ),
           ListTile(
             leading: const Icon(Icons.map_outlined),

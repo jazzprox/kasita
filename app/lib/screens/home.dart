@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:home_widget/home_widget.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import 'package:quick_actions/quick_actions.dart';
 
@@ -30,11 +31,13 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _tab = 0;
   StreamSubscription<List<SharedMediaFile>>? _shareSub;
+  StreamSubscription<Uri?>? _widgetSub;
   AppLifecycleListener? _lifecycle;
 
   @override
   void dispose() {
     _shareSub?.cancel();
+    _widgetSub?.cancel();
     _lifecycle?.dispose();
     super.dispose();
   }
@@ -82,6 +85,13 @@ class _HomeScreenState extends State<HomeScreen> {
           scanReceipt(context);
       }
     });
+    // the widget's + and title open the shopping list
+    void fromWidget(Uri? uri) {
+      if (mounted && uri?.host == 'shopping') setState(() => _tab = 1);
+    }
+
+    HomeWidget.initiallyLaunchedFromHomeWidget().then(fromWidget).catchError((_) {});
+    _widgetSub = HomeWidget.widgetClicked.listen(fromWidget);
     // Share -> Kasita: photos become a receipt, text goes on the shopping list
     ReceiveSharingIntent.instance.getInitialMedia().then((files) {
       if (files.isNotEmpty) WidgetsBinding.instance.addPostFrameCallback((_) => _shared(files));

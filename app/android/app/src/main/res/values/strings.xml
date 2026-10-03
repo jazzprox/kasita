@@ -1,4 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="kasita_widget_description">Shopping list and what to use soon</string>
+    <string name="kasita_widget_description">Shopping list (tap to tick off) and what to use soon</string>
 </resources>

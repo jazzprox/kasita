@@ -64,6 +64,10 @@
             </intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/kasita_widget_info"/>
         </receiver>
+        <!-- the widget's tickable list rows -->
+        <service android:name=".KasitaWidgetService"
+                 android:permission="android.permission.BIND_REMOTEVIEWS"
+                 android:exported="false"/>
         <!-- native_geofence: geofence events, re-register after reboot, optional foreground work -->
         <receiver android:name="com.chunkytofustudios.native_geofence.receivers.NativeGeofenceBroadcastReceiver"
                   android:exported="true"/>

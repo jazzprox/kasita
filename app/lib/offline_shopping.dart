@@ -51,6 +51,9 @@ class OfflineShopping {
 
   Future<int> pendingCount() async => (await _queue()).length;
 
+  /// When a queued tick really happened (so the store walk is learned in the right order).
+  static DateTime? _at(Map<String, dynamic> op) => op['at'] == null ? null : DateTime.tryParse(op['at'] as String);
+
   /// Queue a change. Changes to an item that only exists locally are folded
   /// into its queued "add" instead of being sent separately.
   Future<void> enqueue(Map<String, dynamic> op) async {
@@ -62,7 +65,7 @@ class OfflineShopping {
         if (op['op'] == 'delete') {
           q.removeAt(add);
         } else if (op['op'] == 'done') {
-          q[add] = {...q[add], 'done': op['done']};
+          q[add] = {...q[add], 'done': op['done'], 'at': op['at'], 'store_id': op['store_id']};
         }
         await _setQueue(q);
         return;
@@ -87,10 +90,12 @@ class OfflineShopping {
               // the server gave it a new id; find it and tick it
               final items = await api.shopping(hid);
               final match = items.where((i) => i.name == op['name'] && !i.done).lastOrNull;
-              if (match != null) await api.setShoppingDone(hid, match.id, true);
+              if (match != null) {
+                await api.setShoppingDone(hid, match.id, true, at: _at(op), storeId: op['store_id']);
+              }
             }
           case 'done':
-            await api.setShoppingDone(hid, op['id'], op['done'] == true);
+            await api.setShoppingDone(hid, op['id'], op['done'] == true, at: _at(op), storeId: op['store_id']);
           case 'delete':
             await api.deleteShopping(hid, op['id']);
         }

@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import '../api.dart';
 
 import '../main.dart';
+import '../price_chart.dart';
 import '../models.dart';
 import '../widgets.dart';
 import 'actions.dart';
@@ -370,6 +371,15 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               padding: EdgeInsets.symmetric(vertical: 8),
               child: Text('Add a price when you buy it to start a history.'),
             ),
+          if (_prices.length >= 2) ...[
+            const SizedBox(height: 8),
+            PriceChart(prices: _prices, currency: s.household!.currency),
+            if (PriceChart.trend(_prices) case final trend?)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(trend, style: t.textTheme.bodySmall),
+              ),
+          ],
           if (cheapest != null)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 8),
@@ -391,7 +401,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   color: cheapest ? t.colorScheme.primary : null,
                 ),
                 title: Text(store),
-                subtitle: Text(dateFmtYear.format(pr.at.toLocal())),
+                subtitle: Text(dateFmtYear.format(pr.on)),
                 trailing: Text(
                   '${s.household!.currency} ${pr.unitPrice.toStringAsFixed(2)}',
                   style: cheapest ? TextStyle(color: t.colorScheme.primary, fontWeight: FontWeight.w600) : null,
@@ -406,7 +416,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               dense: true,
               title: Text('${s.household!.currency} ${pr.unitPrice.toStringAsFixed(2)}'),
               subtitle: Text(pr.storeName ?? 'unknown store'),
-              trailing: Text(dateFmtYear.format(pr.at.toLocal())),
+              trailing: Text(dateFmtYear.format(pr.on)),
             ),
           if (p.shareable) ...[
             const SizedBox(height: 16),

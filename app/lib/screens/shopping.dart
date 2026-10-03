@@ -25,10 +25,13 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
   int _seen = -1;
   bool _offline = false; // showing the list saved on the phone
   bool _byStore = false; // group by the store where each item was cheapest last time
-  String _sort = 'aisle'; // aisle | store | name | newest | oldest
+  String _sort = 'aisle'; // aisle | walk | store | name | newest | oldest
+  String? _walkStore; // the store whose walking order the list follows (and where ticks happen)
+  Map<String, dynamic>? _walk; // GET /shopping/route
 
   static const _sorts = [
     ('aisle', 'By aisle'),
+    ('walk', 'My walk in a store'),
     ('store', 'By cheapest store'),
     ('name', 'Name A–Z'),
     ('newest', 'Newest first'),
@@ -42,6 +45,99 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
     });
     savePref('shopping.sort', v);
     if (_byStore) _loadStores();
+    if (v == 'walk') _loadWalk();
+  }
+
+  /// The learned walking order for the chosen store (the last one walked when none is chosen yet).
+  Future<void> _loadWalk() async {
+    final s = Kasita.read(context);
+    try {
+      final w = await s.api.shoppingRoute(s.hid, storeId: _walkStore);
+      if (!mounted) return;
+      setState(() {
+        _walk = w;
+        _walkStore ??= w['store_id'] as String?;
+      });
+    } catch (_) {
+      // offline: keep the order last loaded
+    }
+  }
+
+  Future<void> _pickWalkStore() async {
+    final s = Kasita.read(context);
+    final walked = {for (final x in (_walk?['stores'] as List? ?? const [])) x['id'] as String: x['trips'] as int};
+    final stores = [...s.stores]..sort((a, b) {
+      final t = (walked[b.id] ?? 0).compareTo(walked[a.id] ?? 0);
+      return t != 0 ? t : a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    });
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            const ListTile(
+              title: Text('Which store are you in?'),
+              subtitle: Text('Tick things as you pick them up: the list learns the order you walk this store.'),
+            ),
+            for (final st in stores)
+              ListTile(
+                leading: Icon(st.id == _walkStore ? Icons.radio_button_checked : Icons.radio_button_unchecked),
+                title: Text(st.name),
+                subtitle: Text(
+                  walked[st.id] == null ? 'Not walked yet' : 'Learned from ${walked[st.id]} trip${walked[st.id] == 1 ? '' : 's'}',
+                ),
+                onTap: () => Navigator.pop(ctx, st.id),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    setState(() => _walkStore = picked);
+    savePref('shopping.walkStore', picked);
+    _loadWalk();
+  }
+
+  /// Open items in the learned walk order; what was never ticked in this store follows, by aisle.
+  List<ShoppingItem> _walkOrder(List<ShoppingItem> open) {
+    final rank = Map<String, dynamic>.from(_walk?['rank'] as Map? ?? const {});
+    int aisle(ShoppingItem i) {
+      final n = _order.indexOf(i.category ?? '');
+      return n < 0 ? _order.length : n;
+    }
+
+    final l = [...open];
+    l.sort((a, b) {
+      final ra = (rank[a.id] as num?)?.toDouble(), rb = (rank[b.id] as num?)?.toDouble();
+      if (ra != null && rb != null && ra != rb) return ra.compareTo(rb);
+      if ((ra == null) != (rb == null)) return ra == null ? 1 : -1;
+      final c = aisle(a).compareTo(aisle(b));
+      return c != 0 ? c : a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    });
+    return l;
+  }
+
+  Widget _walkHeader() {
+    final t = Theme.of(context);
+    final s = Kasita.read(context);
+    final name = s.stores.where((x) => x.id == _walkStore).firstOrNull?.name;
+    final trips = _walk != null && _walk!['store_id'] == _walkStore ? (_walk!['trips'] as num? ?? 0).toInt() : 0;
+    return ListTile(
+      leading: const Icon(Icons.route_outlined),
+      title: Text(name == null ? 'Pick the store you are in' : 'Walking order at $name'),
+      subtitle: Text(
+        name == null
+            ? 'Kasita learns the order you walk each store from the order you tick things.'
+            : trips == 0
+            ? 'Not learned yet: tick things as you pick them up.'
+            : 'Learned from $trips trip${trips == 1 ? '' : 's'}. New things go at the end.',
+        style: t.textTheme.bodySmall,
+      ),
+      trailing: const Icon(Icons.expand_more),
+      onTap: _pickWalkStore,
+    );
   }
 
   List<ShoppingItem> _flat(List<ShoppingItem> open) {
@@ -105,8 +201,11 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
   @override
   void initState() {
     super.initState();
-    loadPref('shopping.sort', 'aisle').then((v) {
-      if (mounted && v != _sort) _setSort(v);
+    loadPref('shopping.walkStore', '').then((v) {
+      if (mounted && v.isNotEmpty) _walkStore = v;
+      loadPref('shopping.sort', 'aisle').then((v) {
+        if (mounted && v != _sort) _setSort(v);
+      });
     });
     // while offline, try again every 20 s so queued changes go out as soon as there is signal
     _retry = Timer.periodic(const Duration(seconds: 20), (_) {
@@ -138,6 +237,7 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
       }
       _loadHints();
       if (_byStore) _loadStores();
+      if (_sort == 'walk') _loadWalk();
     } catch (e) {
       if (!OfflineShopping.isOffline(e)) {
         if (mounted) toast(context, '$e', error: true);
@@ -275,14 +375,22 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
   Future<void> _toggle(ShoppingItem i) async {
     final s = Kasita.read(context);
     final next = [for (final x in _items!) x.id == i.id ? _flip(x) : x];
+    final at = DateTime.now(); // the moment it was picked up, even when it is sent later
+    final store = _sort == 'walk' ? _walkStore : null;
     setState(() => _items = next);
     try {
       if (_offline || i.id.startsWith('local-')) throw const _Offline();
-      await s.api.setShoppingDone(s.hid, i.id, !i.done);
+      await s.api.setShoppingDone(s.hid, i.id, !i.done, at: at, storeId: store);
       await _store().save(next);
     } catch (e) {
       if (OfflineShopping.isOffline(e)) {
-        await _queue({'op': 'done', 'id': i.id, 'done': !i.done}, next);
+        await _queue({
+          'op': 'done',
+          'id': i.id,
+          'done': !i.done,
+          'at': at.toUtc().toIso8601String(),
+          'store_id': ?store,
+        }, next);
       } else if (mounted) {
         toast(context, '$e', error: true);
       }
@@ -450,7 +558,10 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
                     onRefresh: _load,
                     child: ListView(
                       children: [
-                        if (_byStore && !_offline)
+                        if (_sort == 'walk') ...[
+                          _walkHeader(),
+                          for (final i in _walkOrder(open)) _tile(i),
+                        ] else if (_byStore && !_offline)
                           ..._storeSections(open)
                         else if (_sort != 'aisle' && _sort != 'store')
                           for (final i in _flat(open)) _tile(i)

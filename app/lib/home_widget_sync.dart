@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:home_widget/home_widget.dart';
 
@@ -13,10 +15,20 @@ Future<void> syncShoppingWidget(List<ShoppingItem> items) async {
   if (!_supported) return;
   final open = items.where((i) => !i.done).toList();
   try {
-    await HomeWidget.saveWidgetData<String>('shopping_title', 'Shopping list (${open.length})');
+    // ticks made on the widget that haven't reached the server yet stay off its list
+    final unsent = ((await HomeWidget.getWidgetData<String>('pending_ticks')) ?? '').split(',').toSet();
+    final shown = open.where((i) => !unsent.contains(i.id) && !i.id.startsWith('local-')).toList();
+    await HomeWidget.saveWidgetData<String>('shopping_title', 'Shopping list (${shown.length})');
     await HomeWidget.saveWidgetData<String>(
       'shopping',
-      open.isEmpty ? 'Nothing to buy' : open.take(8).map((i) => '• ${i.name}').join('\n'),
+      shown.isEmpty ? 'Nothing to buy' : shown.take(8).map((i) => '• ${i.name}').join('\n'),
+    );
+    // the tickable list (tap a row on the widget to tick it off)
+    await HomeWidget.saveWidgetData<String>(
+      'items_json',
+      jsonEncode([
+        for (final i in shown.take(60)) {'id': i.id, 'name': i.name, 'quantity': i.quantity},
+      ]),
     );
     await HomeWidget.updateWidget(androidName: 'KasitaWidgetProvider');
   } catch (_) {
@@ -61,7 +73,7 @@ Future<void> ensureWidgetKey(Api api, String hid) async {
 Future<void> clearWidget() async {
   if (!_supported) return;
   try {
-    for (final k in ['kasita_key', 'kasita_hid', 'kasita_server']) {
+    for (final k in ['kasita_key', 'kasita_hid', 'kasita_server', 'items_json', 'pending_ticks']) {
       await HomeWidget.saveWidgetData<String>(k, null);
     }
     await HomeWidget.saveWidgetData<String>('shopping_title', 'Kasita');
