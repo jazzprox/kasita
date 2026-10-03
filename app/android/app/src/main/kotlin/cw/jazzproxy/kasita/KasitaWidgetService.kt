@@ -26,7 +26,7 @@ class KasitaWidgetService : RemoteViewsService() {
         override fun getCount(): Int = rows.size
 
         override fun getViewAt(position: Int): RemoteViews {
-            val o = rows.getOrNull(position) ?: return loadingView
+            val o = rows.getOrNull(position) ?: return getLoadingView()
             val qty = o.optDouble("quantity", 1.0)
             val q = if (qty == 1.0) "" else (if (qty % 1.0 == 0.0) "${qty.toLong()} × " else "$qty × ")
             return RemoteViews(context.packageName, R.layout.kasita_widget_item).apply {
@@ -40,8 +40,6 @@ class KasitaWidgetService : RemoteViewsService() {
 
         override fun getLoadingView(): RemoteViews =
             RemoteViews(context.packageName, R.layout.kasita_widget_item)
-
-        private val loadingView get() = getLoadingView()
 
         override fun getViewTypeCount(): Int = 1
 
