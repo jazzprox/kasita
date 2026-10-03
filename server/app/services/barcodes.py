@@ -25,7 +25,12 @@ SOURCES = [
     ("openproductsfacts", "https://world.openproductsfacts.org"),
     ("openbeautyfacts", "https://world.openbeautyfacts.org"),
 ]
-FIELDS = "product_name,product_name_en,generic_name,brands,quantity,image_front_url,image_url,categories"
+FIELDS = ("product_name,product_name_en,generic_name,brands,quantity,image_front_url,image_url,categories,"
+          "nutriscore_grade,nova_group,nutriments")
+# per-100 g/ml values kept from Open Food Facts' "nutriments"
+NUTRIENTS = {"kcal": "energy-kcal_100g", "sugars": "sugars_100g", "fat": "fat_100g",
+             "saturated_fat": "saturated-fat_100g", "salt": "salt_100g", "protein": "proteins_100g",
+             "fiber": "fiber_100g"}
 USER_AGENT = f"Kasita/0.1 ({settings.off_contact})"  # their API asks for an identifying User-Agent
 
 
@@ -41,6 +46,19 @@ def _parse(source: str, data: dict) -> dict | None:
     name = (p.get("product_name") or p.get("product_name_en") or p.get("generic_name") or "").strip()
     if not name:
         return None
+    grade = (p.get("nutriscore_grade") or "").lower()
+    try:
+        nova = int(p.get("nova_group")) if p.get("nova_group") not in (None, "") else None
+    except (TypeError, ValueError):
+        nova = None
+    raw = p.get("nutriments") or {}
+    nutrients = {}
+    for k, field in NUTRIENTS.items():
+        try:
+            if raw.get(field) not in (None, ""):
+                nutrients[k] = round(float(raw[field]), 2)
+        except (TypeError, ValueError):
+            pass
     return {
         "source": source,
         "name": name[:255],
@@ -48,6 +66,9 @@ def _parse(source: str, data: dict) -> dict | None:
         "quantity_text": (p.get("quantity") or None),
         "image_url": p.get("image_front_url") or p.get("image_url"),
         "categories": p.get("categories"),
+        "nutriscore": grade if grade in ("a", "b", "c", "d", "e") else None,
+        "nova": nova if nova in (1, 2, 3, 4) else None,
+        "nutrients": nutrients or None,
     }
 
 
@@ -239,7 +260,8 @@ def lookup(db: Session, barcode: str, *, refresh: bool = False, fetch=None) -> B
         checked_at = now - timedelta(days=settings.barcode_cache_days) + timedelta(hours=RETRY_HOURS)
     row = cached or BarcodeCache(barcode=barcode)
     row.found = bool(hit)
-    for k in ("source", "name", "brand", "quantity_text", "image_url", "categories"):
+    for k in ("source", "name", "brand", "quantity_text", "image_url", "categories", "nutriscore", "nova",
+              "nutrients"):
         setattr(row, k, (hit or {}).get(k))
     row.fetched_at = checked_at
     db.merge(row)

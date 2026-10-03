@@ -168,6 +168,8 @@ class ProductIn(BaseModel):
     open_days: int | None = Field(default=None, ge=1, le=365)
     notes: str | None = None
     barcodes: list[str] = []
+    size_amount: Decimal | None = Field(default=None, gt=0)  # g / ml / pcs in one unit of stock
+    size_unit: Literal["g", "ml", "pcs"] | None = None
 
 
 class ProductPatch(BaseModel):
@@ -182,6 +184,8 @@ class ProductPatch(BaseModel):
     open_days: int | None = Field(default=None, ge=1, le=365)
     notes: str | None = None
     archived: bool | None = None
+    size_amount: Decimal | None = Field(default=None, gt=0)
+    size_unit: Literal["g", "ml", "pcs"] | None = None
 
 
 class ProductOut(ORM):
@@ -204,6 +208,12 @@ class ProductOut(ORM):
     runs_out_in_days: float | None = None  # from how fast it gets used; None = not enough history
     photo_source: str | None = None  # "yours" (taken in Kasita) | "database" (came with the barcode) | None
     can_restore_photo: bool = False  # a database photo was replaced and can be put back
+    size_amount: Decimal | None = None
+    size_unit: str | None = None
+    nutriscore: str | None = None   # a..e, from Open Food Facts via the product's barcodes
+    nova: int | None = None         # 1..4 (4 = ultra-processed)
+    nutrients: dict | None = None   # per 100 g/ml: kcal, sugars, fat, saturated_fat, salt, protein, fiber
+    weighed: bool = False           # keyed by a deli/scale barcode: sold by weight
 
 
 class BarcodeLookupOut(BaseModel):
@@ -218,6 +228,11 @@ class BarcodeLookupOut(BaseModel):
     categories: str | None = None  # the database's own text, e.g. "Colas, Sodas"
     category: str | None = None    # Kasita's category: the product's own, else a guess
     brand_hint: str | None = None  # unknown barcode: the maker, from its company prefix
+    # a deli/butcher scale label: the code holds the item number and its price, not a product
+    variable: bool = False
+    embedded_price: Decimal | None = None
+    nutriscore: str | None = None
+    nova: int | None = None
 
 
 # --- stock ------------------------------------------------------------------
@@ -282,6 +297,8 @@ class StockEventOut(ORM):
 class PricePoint(BaseModel):
     at: datetime  # when it was booked
     on: date | None = None  # the day it was bought (the receipt's date)
+    per_base: Decimal | None = None  # the same price per kg / l / piece (needs the pack size, or a weighed product)
+    per: str | None = None           # "kg" | "l" | "each"
     unit_price: Decimal
     quantity: Decimal
     store_id: str | None

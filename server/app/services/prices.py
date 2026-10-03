@@ -140,3 +140,36 @@ def price_changes(db: Session, household_id: str, days: int = 7) -> list[dict]:
             seen.add(key)
         last[key] = price
     return sorted(out, key=lambda x: -x["pct"])
+
+
+def _words(name: str) -> set[str]:
+    stop = {"the", "and", "with", "for", "pack", "big", "small", "large", "new"}
+    return {w for w in "".join(c.lower() if c.isalpha() else " " for c in name).split()
+            if len(w) >= 3 and w not in stop}
+
+
+def similar_per_base(db: Session, household_id: str, product: Product) -> list[dict]:
+    """The same kind of thing in other sizes or brands, by the latest price per kg / l / piece:
+    products in the same category sharing a name word (rice 1 kg vs 2 kg vs another brand)."""
+    from .sizes import per_base
+    mine = _words(product.name)
+    if not mine:
+        return []
+    cands = [p for p in db.scalars(select(Product).where(Product.household_id == household_id,
+                                                         Product.archived.is_(False)))
+             if p.id == product.id or (p.category == product.category and mine & _words(p.name))]
+    latest = store_prices(db, household_id, [p.id for p in cands])
+    out = []
+    for p in cands:
+        prices = (latest.get(p.id) or {}).get("prices") or {}
+        if not prices:
+            continue
+        best = min(prices.values(), key=lambda x: x["price"])
+        base = per_base(best["price"], p)
+        if not base:
+            continue
+        out.append({"product_id": p.id, "name": p.name, "store": best["store"], "price": best["price"],
+                    "per_base": base[0].quantize(Decimal("0.01")), "per": base[1], "this": p.id == product.id})
+    per = next((x["per"] for x in out if x["this"]), None)
+    out = [x for x in out if per is None or x["per"] == per]  # kg with kg, l with l
+    return sorted(out, key=lambda x: x["per_base"])

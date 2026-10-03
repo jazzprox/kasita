@@ -105,3 +105,67 @@ def read_date(db: Session, household_id: str, data: bytes) -> dict:
     except ValueError:
         d = None
     return {"date": d.isoformat() if d else None, "printed": got.get("printed")}
+
+
+LABEL_INSTRUCTIONS = """You read a deli / butcher / scale label (cheese, meat, fish, produce weighed in the store).
+Reply with ONLY a JSON object:
+{"name": string|null, "weight": number|null, "weight_unit": "kg"|"g"|"lb"|"oz"|null,
+ "price_per": number|null, "price_per_unit": "kg"|"100g"|"lb"|null, "total": number|null,
+ "best_before": "YYYY-MM-DD"|null, "packed_on": "YYYY-MM-DD"|null}
+- "name": the product as printed, readable English if you can (e.g. "Gouda cheese young").
+- Numbers as printed, decimal point (Curaçao and Dutch labels print 1,25 for 1.25).
+- "price_per": the unit price (per kg, per 100 g or per lb as printed); "total": the amount to pay.
+- Dates: day first unless the label is clearly US style. Missing values: null."""
+
+
+def ask_label(db: Session, household_id: str, jpeg: bytes) -> dict:
+    """Tests replace this function."""
+    secret = chatgpt.fresh_secret(db, household_id)
+    text = codex.respond(secret, chatgpt.model_for(db, household_id), LABEL_INSTRUCTIONS, [
+        {"type": "input_text", "text": f"Today is {date.today().isoformat()}. Read this label."},
+        {"type": "input_image", "image_url": "data:image/jpeg;base64," + base64.b64encode(jpeg).decode(),
+         "detail": "high"},
+    ], timeout=60)
+    return extract_json(text)
+
+
+def _num(v) -> float | None:
+    try:
+        return float(str(v).replace(",", ".")) if v not in (None, "") else None
+    except ValueError:
+        return None
+
+
+def read_label(db: Session, household_id: str, data: bytes) -> dict:
+    """{"name", "weight_kg", "price_per_kg", "total", "best_before", "packed_on"}: what the scale printed,
+    in kilos. Missing parts are worked out from the others (weight = total / price per kg...)."""
+    try:
+        img = ImageOps.exif_transpose(Image.open(io.BytesIO(data))).convert("RGB")
+    except Exception as e:  # noqa: BLE001
+        raise ValueError("That file is not an image Kasita can read") from e
+    img.thumbnail((1600, 1600))
+    buf = io.BytesIO()
+    img.save(buf, "JPEG", quality=88)
+    got = ask_label(db, household_id, buf.getvalue())
+    w = _num(got.get("weight"))
+    w = None if w is None else {"g": w / 1000, "lb": w * 0.453592, "oz": w * 0.0283495}.get(
+        (got.get("weight_unit") or "kg").lower(), w)
+    per = _num(got.get("price_per"))
+    per = None if per is None else {"100g": per * 10, "lb": per / 0.453592}.get(
+        (got.get("price_per_unit") or "kg").lower(), per)
+    total = _num(got.get("total"))
+    if w is None and per and total:
+        w = total / per
+    if per is None and w and total:
+        per = total / w
+    if total is None and w and per:
+        total = w * per
+
+    def day(v):
+        try:
+            return date.fromisoformat(str(v)[:10]).isoformat() if v else None
+        except ValueError:
+            return None
+    return {"name": got.get("name"), "weight_kg": round(w, 3) if w else None,
+            "price_per_kg": round(per, 2) if per else None, "total": round(total, 2) if total else None,
+            "best_before": day(got.get("best_before")), "packed_on": day(got.get("packed_on"))}

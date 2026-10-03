@@ -1,4 +1,5 @@
 import re
+from decimal import Decimal
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
@@ -9,10 +10,10 @@ from sqlalchemy.orm import Session
 from ..config import settings
 from ..db import get_db
 from ..deps import HouseholdAccess, household_access
-from ..models import Product, ProductBarcode, StockEntry, StockEvent, Store
+from ..models import BarcodeCache, Product, ProductBarcode, StockEntry, StockEvent, Store
 from ..schemas import CookIn, BarcodeLookupOut, PricePoint, ProductIn, ProductOut, ProductPatch
 from ..services import barcodes as bc
-from ..services import categories, codex
+from ..services import categories, codex, sizes
 from ..services import contribute as contrib
 from ..services import cook as cooking
 from ..services import identify as ident
@@ -35,20 +36,47 @@ def _runs_out(db: Session, p: Product) -> float | None:
     return round(fc[1], 1) if fc else None
 
 
+def nutrition(db: Session, p: Product) -> dict:
+    """The product's Nutri-Score / NOVA / nutrients, from the first of its barcodes a database rated."""
+    codes = [b.barcode for b in p.barcodes if not b.barcode.startswith("W")]
+    if not codes:
+        return {"nutriscore": None, "nova": None, "nutrients": None}
+    rows = db.scalars(select(BarcodeCache).where(BarcodeCache.barcode.in_(codes), BarcodeCache.found.is_(True)))
+    out = {"nutriscore": None, "nova": None, "nutrients": None}
+    for r in rows:
+        for k in out:
+            out[k] = out[k] or getattr(r, k)
+    return out
+
+
 def product_out(db: Session, p: Product) -> ProductOut:
     nxt = db.scalar(select(func.min(StockEntry.best_before)).where(
         StockEntry.product_id == p.id, StockEntry.quantity > 0))
-    fields = {k: getattr(p, k) for k in ProductOut.model_fields if k not in ("barcodes", "in_stock", "next_best_before", "shareable", "runs_out_in_days",
-                                                           "photo_source", "can_restore_photo")}
-    return ProductOut(**fields, barcodes=[b.barcode for b in p.barcodes], in_stock=in_stock(db, p.id),
+    skip = ("barcodes", "in_stock", "next_best_before", "shareable", "runs_out_in_days", "photo_source",
+            "can_restore_photo", "nutriscore", "nova", "nutrients", "weighed")
+    fields = {k: getattr(p, k) for k in ProductOut.model_fields if k not in skip}
+    return ProductOut(**fields, **nutrition(db, p), weighed=any(b.barcode.startswith("W") for b in p.barcodes),
+                      barcodes=[b.barcode for b in p.barcodes], in_stock=in_stock(db, p.id),
                       next_best_before=nxt, shareable=contrib.shareable_barcode(db, p) is not None,
                       runs_out_in_days=_runs_out(db, p), photo_source=_photo_source(p.image_url),
                       can_restore_photo=bool(p.db_image_url and p.image_url != p.db_image_url))
 
 
+def _code_key(raw: str) -> str | None:
+    """What a barcode is stored as: the digits, or "W<item part>" for a deli/scale label
+    (its price is in the code, so only the item part identifies the product)."""
+    if raw and raw.startswith("W") and raw[1:].isdigit():
+        return raw
+    code = bc.normalise(raw)
+    if not code:
+        return None
+    var = sizes.variable(code)
+    return var["key"] if var else code
+
+
 def _attach_barcodes(db: Session, household_id: str, product: Product, codes: list[str]) -> None:
     for raw in codes:
-        code = bc.normalise(raw)
+        code = _code_key(raw)
         if not code:
             raise HTTPException(422, f"Not a valid barcode: {raw!r}")
         taken = db.scalar(select(ProductBarcode).where(ProductBarcode.household_id == household_id,
@@ -80,6 +108,11 @@ def create_product(body: ProductIn, a: HouseholdAccess = Depends(household_acces
     db.add(p)
     db.flush()
     _attach_barcodes(db, a.household.id, p, body.barcodes)
+    if any(sizes.variable(bc.normalise(c) or "") for c in body.barcodes) and p.unit == "pcs":
+        p.unit = "kg"  # from a deli/scale label: sold by weight
+    texts = [db.get(BarcodeCache, c).quantity_text for c in (bc.normalise(x) for x in body.barcodes)
+             if c and db.get(BarcodeCache, c)]
+    sizes.fill_size(p, *texts, p.name)
     db.commit()
     db.refresh(p)
     return product_out(db, p)
@@ -107,7 +140,12 @@ def add_barcode(product_id: str, barcode: str = Query(...), a: HouseholdAccess =
     category from the product databases where the product has none yet; never overwrites."""
     p = get_product(db, a.household.id, product_id)
     _attach_barcodes(db, a.household.id, p, [barcode])
+    if (_code_key(barcode) or "").startswith("W"):  # a deli label: nothing to look up
+        db.commit()
+        db.refresh(p)
+        return product_out(db, p)
     hit = bc.lookup(db, bc.normalise(barcode) or barcode)
+    sizes.fill_size(p, hit.quantity_text if hit.found else None, p.name)
     if hit.found:
         p.image_url = p.image_url or hit.image_url
         p.db_image_url = p.db_image_url or hit.image_url
@@ -126,6 +164,15 @@ def lookup_barcode(barcode: str, refresh: bool = False, a: HouseholdAccess = Dep
     code = bc.normalise(barcode)
     if not code:
         raise HTTPException(422, "Not a valid barcode")
+    var = sizes.variable(code)
+    if var:
+        # a deli/butcher scale label: known by its item part; no product database has these
+        link = db.scalar(select(ProductBarcode).where(ProductBarcode.household_id == a.household.id,
+                                                      ProductBarcode.barcode == var["key"]))
+        prod = product_out(db, link.product) if link else None
+        return BarcodeLookupOut(barcode=code, product=prod, found=bool(link), source="household" if link else None,
+                                name=link.product.name if link else None, variable=True,
+                                embedded_price=var["value"], category=link.product.category if link else None)
     link = db.scalar(select(ProductBarcode).where(ProductBarcode.household_id == a.household.id,
                                                   ProductBarcode.barcode == code))
     if link and not refresh:
@@ -136,7 +183,8 @@ def lookup_barcode(barcode: str, refresh: bool = False, a: HouseholdAccess = Dep
     hint = None if hit.found else bc.brand_hint(db, a.household.id, code)
     return BarcodeLookupOut(brand_hint=hint, barcode=code, product=product_out(db, link.product) if link else None, found=hit.found,
                             source=hit.source, name=hit.name, brand=hit.brand, quantity_text=hit.quantity_text,
-                            image_url=hit.image_url, categories=hit.categories,
+                            image_url=hit.image_url, categories=hit.categories, nutriscore=hit.nutriscore,
+                            nova=hit.nova,
                             category=categories.guess(hit.name, hit.categories)
                             or categories.SOURCE_DEFAULT.get(hit.source or ""))
 
@@ -152,8 +200,15 @@ def price_history(product_id: str, a: HouseholdAccess = Depends(household_access
     )).all()
     # newest first by the day it was bought (a receipt's date), not the day it was booked
     rows = sorted(rows, key=lambda r: (r[2] or r[0].at.date(), r[0].at), reverse=True)
-    return [PricePoint(at=e.at, on=bought or e.at.date(), unit_price=e.unit_price, quantity=e.quantity,
-                       store_id=e.store_id, store_name=name) for e, name, bought in rows]
+    p = get_product(db, a.household.id, product_id)
+    out = []
+    for e, name, bought in rows:
+        base = sizes.per_base(e.unit_price, p)
+        out.append(PricePoint(at=e.at, on=bought or e.at.date(), unit_price=e.unit_price, quantity=e.quantity,
+                              store_id=e.store_id, store_name=name,
+                              per_base=base[0].quantize(Decimal("0.01")) if base else None,
+                              per=base[1] if base else None))
+    return out
 
 
 @router.get("/categories", response_model=list[str])
@@ -305,3 +360,10 @@ def widget_tick(item_id: str, a: HouseholdAccess = Depends(household_access), db
         item.done, item.done_at = True, tick.ticked_at
         db.commit()
     return {"id": item.id, "done": True}
+
+
+@router.get("/products/{product_id}/compare")
+def compare_sizes(product_id: str, a: HouseholdAccess = Depends(household_access), db: Session = Depends(get_db)):
+    """Similar products (same category, a shared name word) by their latest price per kg / l / piece."""
+    from ..services.prices import similar_per_base
+    return similar_per_base(db, a.household.id, get_product(db, a.household.id, product_id))

@@ -452,6 +452,9 @@ def confirm(db: Session, receipt: Receipt, user_id: str | None, *, create_missin
                 name = (line.name or line.raw_text.title())[:255]
                 product = Product(household_id=hid, name=name, unit="kg" if weighed else "pcs",
                                   category=categories.guess(name))
+                if not weighed:
+                    from . import sizes
+                    sizes.fill_size(product, line.name, line.raw_text)  # "Whole milk 1 L", "TOILET PPR 12R"
                 db.add(product)
                 db.flush()
                 line.product_id = product.id

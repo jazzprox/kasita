@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse
 from . import models  # noqa: F401  (register tables)
 from .config import settings
 from .migrate import migrate
-from .routers import auth, bills, households, integrations, products, receipts, recipes, shopping, stock, stores
+from .routers import auth, bills, households, integrations, mcp, products, receipts, recipes, shopping, stock, stores
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 # httpx logs every outgoing URL at INFO; upcdatabase needs its key in the URL, so keep those out
@@ -27,7 +27,7 @@ app = FastAPI(title="Kasita", version="0.1.0", lifespan=lifespan,
 
 for r in (auth.router, households.router, products.router, stock.router, shopping.router, receipts.router,
           integrations.router, recipes.router, bills.router, stores.router,
-          stores.stats_router):
+          stores.stats_router, mcp.router):
     app.include_router(r)
 app.include_router(products.public)
 

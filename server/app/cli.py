@@ -89,6 +89,31 @@ def digest(kind: str, dry_run: bool) -> None:
                 dg.send(title, msg, tags, topic=h.ntfy_topic)
 
 
+def fill_products() -> None:
+    """Once after an upgrade: pack sizes from barcode data / names, and Open Food Facts nutrition for
+    barcodes cached before Kasita kept it (re-asked politely, one per second)."""
+    import time
+
+    from .models import BarcodeCache, Product
+    from .services import barcodes, sizes
+    with SessionLocal() as db:
+        n = 0
+        for p in db.scalars(select(Product).where(Product.size_amount.is_(None))):
+            texts = [db.get(BarcodeCache, b.barcode).quantity_text for b in p.barcodes
+                     if db.get(BarcodeCache, b.barcode)]
+            if p.unit == "pcs" and sizes.fill_size(p, *texts, p.name):
+                n += 1
+        db.commit()
+        print(f"pack sizes filled in: {n}")
+        stale = list(db.scalars(select(BarcodeCache.barcode).where(
+            BarcodeCache.found.is_(True), BarcodeCache.source == "openfoodfacts",
+            BarcodeCache.nutriscore.is_(None), BarcodeCache.nova.is_(None), BarcodeCache.nutrients.is_(None))))
+        for code in stale:
+            row = barcodes.lookup(db, code, refresh=True)
+            print(f"{code}: {row.name} nutri-score={row.nutriscore} nova={row.nova}")
+            time.sleep(1)
+
+
 def geocode_stores(redo: bool) -> None:
     """Put stores on the map from their address or name (OpenStreetMap Nominatim, 1 request/second)."""
     from .services.geocode import geocode_all
@@ -109,11 +134,14 @@ def main() -> None:
     d.add_argument("--dry-run", action="store_true")
     g = sub.add_parser("geocode-stores", help="find stores without a location on the map (Nominatim)")
     g.add_argument("--redo", action="store_true", help="also look up stores found before (never hand-placed ones)")
+    sub.add_parser("fill-products", help="pack sizes + Open Food Facts nutrition for existing products")
     args = ap.parse_args()
     if args.cmd == "create-admin":
         create_admin(args.email, args.name, args.household)
     elif args.cmd == "digest":
         digest(args.kind, args.dry_run)
+    elif args.cmd == "fill-products":
+        fill_products()
     elif args.cmd == "geocode-stores":
         geocode_stores(args.redo)
 

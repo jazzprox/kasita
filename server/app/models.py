@@ -124,6 +124,10 @@ class BarcodeCache(Base):
     quantity_text: Mapped[str | None] = mapped_column(String(64))  # "1.5 l", "12 rolls"
     image_url: Mapped[str | None] = mapped_column(Text)
     categories: Mapped[str | None] = mapped_column(Text)
+    # Open Food Facts nutrition: Nutri-Score a..e, NOVA 1..4 (4 = ultra-processed), per-100 g/ml values
+    nutriscore: Mapped[str | None] = mapped_column(String(2))
+    nova: Mapped[int | None]
+    nutrients: Mapped[dict | None] = mapped_column(JSON)
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
@@ -186,6 +190,9 @@ class Product(Base):
     min_stock: Mapped[Decimal] = mapped_column(Qty, default=0)  # below this it goes on the shopping list
     shelf_life_days: Mapped[int | None]  # default best-before offset when none is entered
     open_days: Mapped[int | None]  # keeps this many days once opened (milk 5, salsa 14...)
+    # what one unit of stock holds, in g / ml / pcs ("1.5 l" = 1500 ml): prices per kg / l / piece
+    size_amount: Mapped[Decimal | None] = mapped_column(Qty)
+    size_unit: Mapped[str | None] = mapped_column(String(8))
     notes: Mapped[str | None] = mapped_column(Text)
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
@@ -367,6 +374,8 @@ class Recipe(Base):
     title: Mapped[str] = mapped_column(String(160))
     minutes: Mapped[int | None]
     steps: Mapped[list] = mapped_column(JSON, default=list)
+    source_url: Mapped[str | None] = mapped_column(Text)  # imported from this page
+    servings: Mapped[str | None] = mapped_column(String(40))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     ingredients: Mapped[list["RecipeIngredient"]] = relationship(back_populates="recipe", cascade="all, delete-orphan",
@@ -382,6 +391,7 @@ class RecipeIngredient(Base):
     name: Mapped[str] = mapped_column(String(160))
     product_id: Mapped[str | None] = mapped_column(ForeignKey("products.id", ondelete="SET NULL"))
     quantity: Mapped[Decimal] = mapped_column(Qty, default=1)  # in the product's unit; what 'Cooked it' takes
+    amount: Mapped[str | None] = mapped_column(String(60))  # as the recipe says it: "2 cups", "1 tbsp"
 
     recipe: Mapped[Recipe] = relationship(back_populates="ingredients")
 

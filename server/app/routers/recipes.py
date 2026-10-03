@@ -1,4 +1,5 @@
 """Saved recipes, 'Cooked it', and the week's meal plan."""
+import re
 from datetime import date, timedelta
 from decimal import Decimal
 
@@ -49,20 +50,24 @@ def _out(db: Session, r: Recipe) -> dict:
     for i in r.ingredients:
         have = svc.in_stock(db, i.product_id) if i.product_id else Decimal(0)
         ings.append({"id": i.id, "name": i.name, "product_id": i.product_id, "quantity": i.quantity,
-                     "in_stock": have, "have": bool(i.product_id) and have >= i.quantity})
+                     "amount": i.amount, "in_stock": have, "have": bool(i.product_id) and have >= i.quantity})
     return {"id": r.id, "title": r.title, "minutes": r.minutes, "steps": r.steps or [], "ingredients": ings,
-            "ready": all(x["have"] for x in ings)}
+            "ready": all(x["have"] for x in ings), "source_url": r.source_url, "servings": r.servings}
 
 
 def _match(products: list[Product], name: str) -> Product | None:
-    """'Chicken wings 6 ct' as the AI wrote it -> the household's product (exact, then contained)."""
+    """'Chicken wings 6 ct' as the AI wrote it -> the household's product (exact, then contained,
+    then on whole words: "all-purpose flour" finds "Flour", not "Flour tortillas" over "Flour")."""
     low = name.strip().lower()
+    if not low:
+        return None
     for p in products:
         if p.name.lower() == low:
             return p
     for p in sorted(products, key=lambda p: -len(p.name)):
-        if p.name.lower() in low or low in p.name.lower():
-            return p
+        pn = p.name.lower()
+        if re.search(rf"\b{re.escape(pn)}\b", low) or re.search(rf"\b{re.escape(low)}\b", pn):
+            return p  # whole words: "salted butter" is not "Salt"
     return None
 
 
@@ -85,6 +90,52 @@ def save_recipe(body: RecipeIn, a: HouseholdAccess = Depends(household_access), 
     db.add(r)
     db.commit()
     return _out(db, r)
+
+
+class ImportIn(BaseModel):
+    url: str = Field(min_length=8, max_length=2000)
+
+
+@router.post("/recipes/import", status_code=201)
+def import_recipe(body: ImportIn, a: HouseholdAccess = Depends(household_access), db: Session = Depends(get_db)):
+    """A recipe from a web page: its schema.org data, else ChatGPT reads the page. Ingredients are
+    matched to the pantry; what isn't there can go on the list with 'Plan' / 'Missing to list'."""
+    from ..services import recipe_import as ri
+    try:
+        got = ri.read(db, a.household.id, body.url)
+    except ri.ImportError_ as e:
+        raise HTTPException(422, str(e)) from e
+    products = db.scalars(select(Product).where(Product.household_id == a.household.id,
+                                                Product.archived.is_(False))).all()
+    r = Recipe(household_id=a.household.id, title=got["title"], minutes=got.get("minutes"),
+               steps=got.get("steps") or [], source_url=body.url.strip()[:2000],
+               servings=(str(got["servings"])[:40] if got.get("servings") else None))
+    for n, (amount, item) in enumerate(got["ingredients"]):
+        p = _match(products, item)
+        r.ingredients.append(RecipeIngredient(position=n, name=item[:160], amount=(amount or None),
+                                              product_id=p.id if p else None, quantity=Decimal(1)))
+    db.add(r)
+    db.commit()
+    return {**_out(db, r), "via": got["via"]}
+
+
+@router.post("/recipes/{recipe_id}/missing-to-list")
+def missing_to_list(recipe_id: str, a: HouseholdAccess = Depends(household_access), db: Session = Depends(get_db)):
+    """Everything this recipe needs that the pantry lacks, onto the shopping list (no duplicates)."""
+    r = _recipe(db, a.household.id, recipe_id)
+    open_items = db.scalars(select(ShoppingItem).where(ShoppingItem.household_id == a.household.id,
+                                                       ShoppingItem.done.is_(False))).all()
+    on_list = {x.product_id for x in open_items if x.product_id} | {x.name.lower() for x in open_items}
+    added = []
+    for i in r.ingredients:
+        have = svc.in_stock(db, i.product_id) if i.product_id else Decimal(0)
+        if have >= i.quantity or i.product_id in on_list or i.name.lower() in on_list:
+            continue
+        db.add(ShoppingItem(household_id=a.household.id, product_id=i.product_id, name=i.name,
+                            note=f"for {r.title}"[:255], added_by=a.user.id))
+        added.append(i.name)
+    db.commit()
+    return {"added": added}
 
 
 @router.get("/recipes/{recipe_id}")

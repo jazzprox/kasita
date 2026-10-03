@@ -161,3 +161,26 @@ def activity(limit: int = 60, a: HouseholdAccess = Depends(household_access), db
     """Who did what: bought, used, opened, put on the list, scanned a receipt."""
     from ..services.activity import feed
     return feed(db, a.household.id, limit=max(1, min(limit, 200)))
+
+
+@router.post("/read-label")
+async def read_label(file: UploadFile = File(...), a: HouseholdAccess = Depends(household_access),
+                     db: Session = Depends(get_db)):
+    """Photo of a deli / scale label -> weight (kg), price per kg, total, dates (household's ChatGPT)."""
+    from ..services import codex, identify
+    data = await file.read(20 * 1024 * 1024 + 1)
+    if len(data) > 20 * 1024 * 1024:
+        raise HTTPException(413, "Photo is larger than 20 MB")
+    try:
+        return identify.read_label(db, a.household.id, data)
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+    except codex.CodexError as e:
+        raise HTTPException(502, str(e)) from e
+
+
+@router.get("/nutrition")
+def nutrition(days: int = 30, a: HouseholdAccess = Depends(household_access), db: Session = Depends(get_db)):
+    """What the money went on, health-wise: spending per Nutri-Score grade and NOVA group."""
+    from ..services.nutrition import report
+    return report(db, a.household.id, days=max(1, min(days, 366)))
