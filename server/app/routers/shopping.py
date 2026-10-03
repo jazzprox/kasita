@@ -112,3 +112,10 @@ def by_store(a: HouseholdAccess = Depends(household_access), db: Session = Depen
     """The open list split by the store where each item was cheapest lately (receipt prices, last 120 days)."""
     from ..services.prices import cheapest_split
     return cheapest_split(db, a.household.id)
+
+
+@router.get("/market")
+def market_hints(a: HouseholdAccess = Depends(household_access), db: Session = Depends(get_db)):
+    """Open items that a shop with online prices lists: {item_id: {store, price, on_sale, previous_price...}}."""
+    from ..services import market
+    return market.shopping_market(db, a.household.id)

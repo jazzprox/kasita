@@ -199,6 +199,80 @@ def set_plan(day: date, body: PlanIn, a: HouseholdAccess = Depends(household_acc
     return {"day": day, "recipe_id": m.recipe_id, "note": m.note}
 
 
+class AutoPlanIn(BaseModel):
+    start: date | None = None
+    days: int = Field(default=7, ge=1, le=10)
+    note: str | None = Field(default=None, max_length=200)
+    budget: Decimal | None = Field(default=None, gt=0)
+
+
+@router.post("/plan/suggest")
+def plan_suggest(body: AutoPlanIn, a: HouseholdAccess = Depends(household_access), db: Session = Depends(get_db)):
+    """A proposed week of dinners from the pantry and the cheapest known prices. Saves nothing: apply it with POST /plan/apply."""
+    from ..services import codex, mealplan
+    try:
+        return mealplan.propose(db, a.household.id, body.start, body.days, body.note, body.budget, match=_match)
+    except codex.CodexError as e:
+        raise HTTPException(502, str(e)) from e
+    except (ValueError, KeyError) as e:
+        raise HTTPException(422, f"Could not plan: {e}") from e
+
+
+class ApplyDay(BaseModel):
+    day: date
+    title: str = Field(min_length=1, max_length=120)
+    minutes: int = 0
+    uses: list[dict] = []   # [{"name", "product_id"}]
+    buy: list[dict] = []    # [{"name", "product_id", "repeat"}]
+    steps: list[str] = []
+
+
+class ApplyPlanIn(BaseModel):
+    days: list[ApplyDay] = Field(min_length=1, max_length=10)
+
+
+@router.post("/plan/apply")
+def plan_apply(body: ApplyPlanIn, a: HouseholdAccess = Depends(household_access), db: Session = Depends(get_db)):
+    """Accept a proposal: one recipe per dinner, the week plan filled in, and what is missing put on the shopping list."""
+    products = {p.id: p for p in db.scalars(select(Product).where(Product.household_id == a.household.id))}
+    open_items = db.scalars(select(ShoppingItem).where(ShoppingItem.household_id == a.household.id,
+                                                       ShoppingItem.done.is_(False))).all()
+    on_list = {x.product_id for x in open_items if x.product_id} | {x.name.lower() for x in open_items}
+    added, made = [], 0
+    for d in body.days:
+        r = Recipe(household_id=a.household.id, title=d.title.strip(), minutes=d.minutes or None,
+                   steps=[x.strip() for x in d.steps if x.strip()][:20])
+        n = 0
+        for u in d.uses:
+            pid = u.get("product_id") if u.get("product_id") in products else None
+            r.ingredients.append(RecipeIngredient(position=n, name=str(u.get("name", ""))[:160], product_id=pid, quantity=Decimal(1)))
+            n += 1
+        for b in d.buy:
+            pid = b.get("product_id") if b.get("product_id") in products else None
+            name = str(b.get("name", "")).strip()[:160]
+            if not name:
+                continue
+            r.ingredients.append(RecipeIngredient(position=n, name=name, product_id=pid, quantity=Decimal(1)))
+            n += 1
+            key = pid or name.lower()
+            if key in on_list or name.lower() in on_list:
+                continue
+            db.add(ShoppingItem(household_id=a.household.id, product_id=pid, name=products[pid].name if pid else name,
+                                note=f"for {d.day:%a}: {d.title}"[:255], added_by=a.user.id))
+            on_list.add(key)
+            added.append(name)
+        db.add(r)
+        db.flush()
+        m = db.scalar(select(MealPlan).where(MealPlan.household_id == a.household.id, MealPlan.day == d.day))
+        if m is None:
+            m = MealPlan(household_id=a.household.id, day=d.day)
+            db.add(m)
+        m.recipe_id, m.note = r.id, None
+        made += 1
+    db.commit()
+    return {"recipes": made, "added_to_list": added}
+
+
 @router.post("/plan/shopping")
 def plan_to_shopping(start: date | None = None, days: int = 7, a: HouseholdAccess = Depends(household_access),
                      db: Session = Depends(get_db)):

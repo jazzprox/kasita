@@ -178,3 +178,149 @@ def test_mcp_server(client, jazz):
     pantry = _rpc(client, ro, "tools/call", {"name": "pantry"})["result"]
     assert pantry["isError"] is False and pantry["structuredContent"]["items"] == []
     assert _rpc(client, full, "nope")["error"]["code"] == -32601
+
+
+def test_admin_pages(client, jazz):
+    from app.db import SessionLocal
+    from app.models import User
+    from tests.conftest import login, make_user
+    h, hid = jazz
+    assert client.get("/api/admin/users", headers=h).status_code == 403  # not an admin yet
+    with SessionLocal() as db:
+        db.query(User).filter_by(email="jazz@example.com").update({"is_admin": True})
+        db.commit()
+    gh = login(client, *make_user("gigi@example.com", "gigi-password-123", "Gigi"))
+    client.post("/api/households", json={"name": "Gigi's"}, headers=gh)
+    us = client.get("/api/admin/users", headers=h).json()
+    assert [u["name"] for u in us] == ["Jazz", "Gigi"] and us[1]["households"][0]["role"] == "owner"
+    assert us[1]["sessions"] == 1 and us[1]["last_seen"]
+    hs = client.get("/api/admin/households", headers=h).json()
+    assert {x["name"] for x in hs} == {"Jazz", "Gigi's"}
+    ov = client.get("/api/admin/overview", headers=h).json()
+    assert ov["users"] == 2 and ov["households"] == 2 and ov["active_this_week"] == 2
+    gid = us[1]["id"]
+    assert client.get("/api/admin/users", headers=gh).status_code == 403  # Gigi isn't an admin
+    temp = client.post(f"/api/admin/users/{gid}/reset-password", headers=h).json()["temporary_password"]
+    assert client.post("/api/auth/login", json={"email": "gigi@example.com", "password": temp}).status_code == 200
+    assert client.post("/api/auth/login", json={"email": "gigi@example.com",
+                                                "password": "gigi-password-123"}).status_code == 401
+    assert client.patch(f"/api/admin/users/{us[0]['id']}", headers=h, json={"is_admin": False}).status_code == 409
+    key = client.post(f"/api/households/{hid}/api-keys", headers=h, json={"name": "agent"}).json()["key"]
+    assert client.get("/api/admin/users", headers={"X-Api-Key": key}).status_code == 403  # keys never
+
+
+# --- market prices (Mangusa) -----------------------------------------------------------------
+def _wc(name, price, sku="0003500046383", on_sale=False, regular=None, stock=True):
+    return {"sku": sku, "name": name, "on_sale": on_sale, "is_in_stock": stock, "permalink": "https://shop/x/",
+            "images": [{"src": "https://shop/x.jpg"}], "categories": [{"name": "Toothpaste"}],
+            "prices": {"price": str(int(price * 100)), "regular_price": str(int((regular or price) * 100)),
+                       "currency_code": "XCG", "currency_minor_unit": 2}}
+
+
+def test_market_sku_forms_and_offer_pick():
+    from app.services import market
+    assert market.skus("035000463838") == ["0003500046383", "0035000463838"]  # UPC-A: without check digit first
+    assert market.skus("78933354") == ["0000078933354"]  # EAN-8 as is... and without check digit is not tried
+    assert market.skus("W2123456") == []
+    items = [_wc("Colgate Mint 5oz", 0), _wc("Colgate Mint 5oz (1 piece)", 10.80), _wc("Colgate Mint 5oz (24 pieces)", 251.45)]
+    o = market.pick_offer(items)
+    assert o["price"] == Decimal("10.80") and o["name"] == "Colgate Mint 5oz" and not o["pack_note"]
+    case_only = market.pick_offer([_wc("Rice 1kg (12 pieces)", 30.00)])
+    assert case_only["price"] == Decimal("2.50") and case_only["pack_note"] == "case of 12: 30.00"
+    assert market.pick_offer([_wc("Nothing", 0)]) is None
+
+
+def test_market_refresh_history_and_api(client, jazz, monkeypatch):
+    import httpx
+    from app.db import SessionLocal
+    from app.services import market
+    monkeypatch.setattr(market, "PAUSE_SECONDS", 0)
+    h, hid = jazz
+    paste = _p(client, h, hid, name="Colgate toothpaste", barcodes=["035000463838"])
+    _p(client, h, hid, name="Unknown thing", barcodes=["5449000000996"])
+    state = {"price": 10.80, "sale": False}
+
+    def handler(request):
+        sku = request.url.params.get("sku")
+        if sku != "0003500046383":
+            return httpx.Response(200, json=[])
+        regular = 12.50
+        return httpx.Response(200, json=[_wc("Colgate Mint (1 piece)", state["price"], on_sale=state["sale"], regular=regular)])
+    client_ = httpx.Client(transport=httpx.MockTransport(handler))
+    with SessionLocal() as db:
+        r = market.refresh_all(db, client=client_)
+        assert r == {"barcodes": 2, "found": 1, "changed": 1, "failed": 0}
+        assert market.refresh_all(db, client=client_)["changed"] == 0  # same price: no new history row
+        state.update(price=9.00, sale=True)
+        assert market.refresh_all(db, client=client_)["changed"] == 1
+    o = client.get(f"/api/households/{hid}/products/{paste['id']}/market", headers=h).json()
+    assert len(o) == 1 and o[0]["store"] == "Mangusa Hypermarket" and Decimal(str(o[0]["price"])) == Decimal("9.00")
+    assert Decimal(str(o[0]["previous_price"])) == Decimal("10.80") and o[0]["on_sale"] and not o[0]["stale"]
+    item = client.post(f"/api/households/{hid}/shopping", headers=h, json={"product_id": paste["id"]}).json()["id"]
+    hints = client.get(f"/api/households/{hid}/shopping/market", headers=h).json()
+    assert Decimal(str(hints[item]["price"])) == Decimal("9.00")
+    with SessionLocal() as db:
+        msg = market.digest(db, hid)
+    assert "Colgate toothpaste: 9.00 at Mangusa Hypermarket (was 12.50), on sale" in msg
+
+
+def test_market_stops_when_shop_is_down(client, jazz, monkeypatch):
+    import httpx
+    from app.db import SessionLocal
+    from app.services import market
+    monkeypatch.setattr(market, "PAUSE_SECONDS", 0)
+    h, hid = jazz
+    for i in range(8):
+        _p(client, h, hid, name=f"P{i}", barcodes=[f"03500046{i:04d}"])
+    down = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(503)))
+    with SessionLocal() as db:
+        r = market.refresh_all(db, client=down)
+    assert r["failed"] == 5 and r["found"] == 0  # gave up after five failures instead of hammering it
+
+
+# --- plan my week -----------------------------------------------------------------------------
+def test_plan_my_week(client, jazz, monkeypatch):
+    from app.services import mealplan
+    h, hid = jazz
+    rice = _p(client, h, hid, name="Rice")
+    chicken = _p(client, h, hid, name="Chicken thighs 1 kg")
+    store = client.post(f"/api/households/{hid}/stores", headers=h, json={"name": "Goisco"}).json()["id"]
+    client.post(f"/api/households/{hid}/stock/purchase", headers=h,
+                json={"product_id": rice["id"], "quantity": 2, "unit_price": "4.00", "store_id": store})
+    asked = {}
+
+    def fake(db, household_id, prompt):
+        asked["prompt"] = prompt
+        return {"notes": "ok", "days": [
+            {"day": "x", "title": "Arroz con pollo", "minutes": 40, "uses": ["Rice"], "buy": ["Chicken thighs 1 kg", "Sofrito"],
+             "steps": ["Brown chicken", "Add rice"], "why": "uses rice"},
+            {"day": "x", "title": "Chicken salad", "minutes": 15, "uses": [], "buy": ["Chicken thighs 1 kg", "Lettuce"],
+             "steps": ["Mix"], "why": ""}]}
+    monkeypatch.setattr(mealplan, "ask_chatgpt", fake)
+    # the household knows what chicken costs from an earlier purchase at Goisco
+    from app.db import SessionLocal
+    from app.services import stock as stock_svc
+    from app.models import Product
+    with SessionLocal() as db:
+        p = db.get(Product, chicken["id"])
+        stock_svc.purchase(db, hid, None, p, Decimal(1), unit_price=Decimal("9.50"), store_id=store)
+        stock_svc.consume(db, hid, None, p, Decimal(1))
+        db.commit()
+    r = client.post(f"/api/households/{hid}/plan/suggest", headers=h, json={"days": 2, "start": "2026-10-05"})
+    assert r.status_code == 200, r.text
+    plan = r.json()
+    assert "2026-10-05, 2026-10-06" in asked["prompt"] and "Rice (2" in asked["prompt"] and "Chicken thighs 1 kg: 9.50 at Goisco" in asked["prompt"]
+    assert [d["day"] for d in plan["days"]] == ["2026-10-05", "2026-10-06"]
+    buy1 = plan["days"][0]["buy"]
+    assert buy1[0]["price"] == "9.50" or Decimal(str(buy1[0]["price"])) == Decimal("9.50")
+    assert buy1[1]["price"] is None  # Sofrito: not a known product, so not guessed
+    assert plan["days"][1]["buy"][0]["repeat"] is True  # chicken bought once for both dinners
+    assert Decimal(str(plan["est_cost"])) == Decimal("9.50") and plan["unpriced"] == 2  # Sofrito + Lettuce
+    assert client.get(f"/api/households/{hid}/recipes", headers=h).json() == []  # nothing saved yet
+    ok = client.post(f"/api/households/{hid}/plan/apply", headers=h, json={"days": plan["days"]})
+    assert ok.status_code == 200, ok.text
+    assert ok.json()["recipes"] == 2 and ok.json()["added_to_list"] == ["Chicken thighs 1 kg", "Sofrito", "Lettuce"]
+    week = client.get(f"/api/households/{hid}/plan?start=2026-10-05&days=2", headers=h).json()
+    assert [w["recipe"]["title"] if w.get("recipe") else None for w in week] == ["Arroz con pollo", "Chicken salad"]
+    names = [i["name"] for i in client.get(f"/api/households/{hid}/shopping", headers=h).json()]
+    assert sorted(names) == ["Chicken thighs 1 kg", "Lettuce", "Sofrito"]

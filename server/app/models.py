@@ -175,6 +175,42 @@ class GeocodeCache(Base):
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
+class MarketPrice(Base):
+    """What a shop that publishes its prices online charges for a product (shared by all households).
+
+    Today: Mangusa Hypermarket (WooCommerce store API; its SKU is the barcode without its check digit,
+    left-padded to 13). One row per (retailer, sku): the latest single-unit price."""
+    __tablename__ = "market_prices"
+    __table_args__ = (UniqueConstraint("retailer", "sku"), Index("ix_market_sku", "sku"))
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    retailer: Mapped[str] = mapped_column(String(24))  # mangusa
+    sku: Mapped[str] = mapped_column(String(24))
+    name: Mapped[str] = mapped_column(String(255))
+    price: Mapped[Decimal] = mapped_column(Money)            # per single unit
+    regular_price: Mapped[Decimal | None] = mapped_column(Money)
+    on_sale: Mapped[bool] = mapped_column(Boolean, default=False)
+    currency: Mapped[str] = mapped_column(String(3), default="XCG")
+    in_stock: Mapped[bool] = mapped_column(Boolean, default=True)
+    pack_note: Mapped[str | None] = mapped_column(String(60))  # "case of 24: 251.45" when no single price exists
+    url: Mapped[str | None] = mapped_column(Text)
+    image_url: Mapped[str | None] = mapped_column(Text)
+    category: Mapped[str | None] = mapped_column(String(160))
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    first_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class MarketPriceChange(Base):
+    """One row each time a market price moved (or first appeared): the history behind 'was 12.50'."""
+    __tablename__ = "market_price_changes"
+    __table_args__ = (Index("ix_market_change_sku", "retailer", "sku", "at"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    retailer: Mapped[str] = mapped_column(String(24))
+    sku: Mapped[str] = mapped_column(String(24))
+    price: Mapped[Decimal] = mapped_column(Money)
+    on_sale: Mapped[bool] = mapped_column(Boolean, default=False)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 class Product(Base):
     __tablename__ = "products"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)

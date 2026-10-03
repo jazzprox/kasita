@@ -58,6 +58,10 @@ def digest(kind: str, dry_run: bool) -> None:
             elif kind == "budget":
                 msg = dg.budget_alert(db, h.id)
                 title, tags = f"{h.name}: grocery budget", "money_with_wings"
+            elif kind == "market":
+                from .services import market
+                msg = market.digest(db, h.id)
+                title, tags = f"{h.name}: online prices", "label"
             elif kind == "securo-month":
                 # on the 1st: last month, Securo's grocery payments next to Kasita's receipts
                 from datetime import date, timedelta
@@ -114,6 +118,14 @@ def fill_products() -> None:
             time.sleep(1)
 
 
+def market_refresh() -> None:
+    """Nightly: ask shops that publish prices online about every barcode here (1 request a second)."""
+    from .services import market
+    with SessionLocal() as db:
+        for retailer in market.RETAILERS:
+            print(retailer, market.refresh_all(db, retailer))
+
+
 def geocode_stores(redo: bool) -> None:
     """Put stores on the map from their address or name (OpenStreetMap Nominatim, 1 request/second)."""
     from .services.geocode import geocode_all
@@ -130,16 +142,19 @@ def main() -> None:
     c.add_argument("--name", required=True)
     c.add_argument("--household")
     d = sub.add_parser("digest", help="push the expiry or weekly digest to ntfy")
-    d.add_argument("kind", choices=["expiry", "weekly", "freezer", "budget", "securo-month"])
+    d.add_argument("kind", choices=["expiry", "weekly", "freezer", "budget", "securo-month", "market"])
     d.add_argument("--dry-run", action="store_true")
     g = sub.add_parser("geocode-stores", help="find stores without a location on the map (Nominatim)")
     g.add_argument("--redo", action="store_true", help="also look up stores found before (never hand-placed ones)")
+    sub.add_parser("market-refresh", help="refresh online shop prices for every barcode (nightly)")
     sub.add_parser("fill-products", help="pack sizes + Open Food Facts nutrition for existing products")
     args = ap.parse_args()
     if args.cmd == "create-admin":
         create_admin(args.email, args.name, args.household)
     elif args.cmd == "digest":
         digest(args.kind, args.dry_run)
+    elif args.cmd == "market-refresh":
+        market_refresh()
     elif args.cmd == "fill-products":
         fill_products()
     elif args.cmd == "geocode-stores":

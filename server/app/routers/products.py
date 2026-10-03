@@ -367,3 +367,10 @@ def compare_sizes(product_id: str, a: HouseholdAccess = Depends(household_access
     """Similar products (same category, a shared name word) by their latest price per kg / l / piece."""
     from ..services.prices import similar_per_base
     return similar_per_base(db, a.household.id, get_product(db, a.household.id, product_id))
+
+
+@router.get("/products/{product_id}/market")
+def market_prices(product_id: str, a: HouseholdAccess = Depends(household_access), db: Session = Depends(get_db)):
+    """What shops that publish prices online charge for this product (matched by barcode)."""
+    from ..services import market
+    return market.offers_for_product(db, get_product(db, a.household.id, product_id))
