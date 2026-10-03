@@ -67,3 +67,18 @@ def securo_connect(body: SecuroConnectIn, a: HouseholdAccess = Depends(household
 @router.delete("/securo", status_code=204)
 def securo_disconnect(a: HouseholdAccess = Depends(household_owner), db: Session = Depends(get_db)):
     securo.disconnect(db, a.household.id)
+
+
+@router.get("/securo/groceries")
+def securo_groceries(month: str | None = None, a: HouseholdAccess = Depends(household_access),
+                     db: Session = Depends(get_db)):
+    """A month of groceries in Securo next to Kasita's receipts (month "YYYY-MM"; default this month)."""
+    import re
+
+    from ..services import securo_month
+    if month is not None and not re.fullmatch(r"\d{4}-\d{2}", month):
+        raise HTTPException(422, "month must look like 2026-09")
+    try:
+        return securo_month.report(db, a.household.id, month)
+    except securo.SecuroError as e:
+        raise HTTPException(502, str(e)) from e

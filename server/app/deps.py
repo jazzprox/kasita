@@ -4,6 +4,7 @@ Two ways in: a user's access token (`Authorization: Bearer ...`) from the
 app, or an API key (`X-Api-Key: ...`) for scripts and agents. An API key is
 bound to one household and can only ever reach that household.
 """
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
@@ -14,6 +15,14 @@ from sqlalchemy.orm import Session
 from .db import get_db
 from .models import ApiKey, Household, Membership, User
 from .security import read_access_token, token_hash
+
+
+# The one change a read-only key may make: the home-screen widget ticking an item off the list.
+_READ_ONLY_WRITES = [re.compile(r"^/api/households/[^/]+/widget/tick/[^/]+$")]
+
+
+def _read_only_may(request: Request) -> bool:
+    return request.method == "POST" and any(p.match(request.url.path) for p in _READ_ONLY_WRITES)
 
 
 @dataclass
@@ -33,7 +42,7 @@ def get_caller(
         if key:
             key.last_used_at = datetime.now(timezone.utc)
             db.commit()
-            if key.read_only and request.method not in ("GET", "HEAD"):
+            if key.read_only and request.method not in ("GET", "HEAD") and not _read_only_may(request):
                 raise HTTPException(status.HTTP_403_FORBIDDEN, "This key can only read")
             user = db.get(User, key.user_id)
             if user:

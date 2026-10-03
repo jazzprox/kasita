@@ -44,6 +44,8 @@ class Settings(BaseSettings):
     nominatim_user_agent: str = "Kasita (self-hosted) jazzprox@github"
     nominatim_country: str = "cw"
     geocode_retry_days: int = 30  # a search that found nothing is tried again after this long
+    # the household's clock, for "which day was this" when a phone doesn't say (Curaçao: UTC-4, no DST)
+    local_utc_offset_hours: int = -4
     # Flutter web build to serve at /, if present
     web_dir: str = "./web"
 

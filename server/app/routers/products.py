@@ -145,11 +145,15 @@ def lookup_barcode(barcode: str, refresh: bool = False, a: HouseholdAccess = Dep
 def price_history(product_id: str, a: HouseholdAccess = Depends(household_access), db: Session = Depends(get_db)):
     """Every price paid for this product, newest first (from purchases and receipts)."""
     get_product(db, a.household.id, product_id)
-    rows = db.execute(select(StockEvent, Store.name).outerjoin(Store, Store.id == StockEvent.store_id).where(
+    rows = db.execute(select(StockEvent, Store.name, StockEntry.purchased_at)
+                      .outerjoin(Store, Store.id == StockEvent.store_id)
+                      .outerjoin(StockEntry, StockEntry.id == StockEvent.entry_id).where(
         StockEvent.product_id == product_id, StockEvent.kind == "purchase", StockEvent.unit_price.is_not(None),
-    ).order_by(StockEvent.at.desc())).all()
-    return [PricePoint(at=e.at, unit_price=e.unit_price, quantity=e.quantity, store_id=e.store_id, store_name=name)
-            for e, name in rows]
+    )).all()
+    # newest first by the day it was bought (a receipt's date), not the day it was booked
+    rows = sorted(rows, key=lambda r: (r[2] or r[0].at.date(), r[0].at), reverse=True)
+    return [PricePoint(at=e.at, on=bought or e.at.date(), unit_price=e.unit_price, quantity=e.quantity,
+                       store_id=e.store_id, store_name=name) for e, name, bought in rows]
 
 
 @router.get("/categories", response_model=list[str])
@@ -282,4 +286,22 @@ def widget(a: HouseholdAccess = Depends(household_access), db: Session = Depends
     soon = [n for n, bb in sorted(soon_rows, key=lambda r: r[1]) if (bb - today).days <= 2][:4]
     return {"shopping_title": f"Shopping list ({len(open_items)})",
             "shopping": "\n".join(f"• {i.name}" for i in open_items[:8]) or "Nothing to buy",
-            "soon": f"Use soon: {', '.join(soon)}" if soon else ""}
+            "soon": f"Use soon: {', '.join(soon)}" if soon else "",
+            # the tickable list (widgets from build 37 on)
+            "items": [{"id": i.id, "name": i.name, "quantity": float(i.quantity)} for i in open_items[:60]]}
+
+
+@router.post("/widget/tick/{item_id}")
+def widget_tick(item_id: str, a: HouseholdAccess = Depends(household_access), db: Session = Depends(get_db)):
+    """Tick an item off from the home-screen widget. The only write its read-only key may do.
+    Ticking something already ticked (a retry after a lost answer) is fine."""
+    from ..models import ShoppingItem
+    from ..services import route
+    item = db.get(ShoppingItem, item_id)
+    if item is None or item.household_id != a.household.id:
+        raise HTTPException(404, "Item not found")
+    if not item.done:
+        tick = route.record(db, item)
+        item.done, item.done_at = True, tick.ticked_at
+        db.commit()
+    return {"id": item.id, "done": True}

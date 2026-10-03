@@ -280,7 +280,8 @@ class StockEventOut(ORM):
 
 
 class PricePoint(BaseModel):
-    at: datetime
+    at: datetime  # when it was booked
+    on: date | None = None  # the day it was bought (the receipt's date)
     unit_price: Decimal
     quantity: Decimal
     store_id: str | None
@@ -300,6 +301,11 @@ class ShoppingPatch(BaseModel):
     quantity: Decimal | None = Field(default=None, gt=0)
     note: str | None = None
     done: bool | None = None
+    # with done=true: when it was ticked (a phone that was offline sends its own time), the phone's
+    # calendar day, and the store you said you're in. Used to learn each store's walking order.
+    ticked_at: datetime | None = None
+    local_day: date | None = None
+    store_id: str | None = None
 
 
 class ShoppingOut(ORM):

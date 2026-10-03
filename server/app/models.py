@@ -261,6 +261,24 @@ class ShoppingItem(Base):
         return (self.product.category if self.product else None) or guess(self.name)
 
 
+class ShoppingTick(Base):
+    """One item ticked off the shopping list, kept after the item itself is cleared. The order
+    things get ticked in a store is the order you walk it: the list learns it per store."""
+    __tablename__ = "shopping_ticks"
+    __table_args__ = (Index("ix_ticks_household_day", "household_id", "local_day"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    household_id: Mapped[str] = mapped_column(ForeignKey("households.id", ondelete="CASCADE"))
+    item_id: Mapped[str] = mapped_column(String(36), index=True)  # the shopping item (no FK: items get cleared)
+    product_id: Mapped[str | None] = mapped_column(ForeignKey("products.id", ondelete="SET NULL"))
+    name_key: Mapped[str] = mapped_column(String(255))  # lower-case name, for free-text items
+    category: Mapped[str | None] = mapped_column(String(80))
+    ticked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    local_day: Mapped[date] = mapped_column(Date)  # the shopper's own calendar day
+    # the store it was ticked in: said by the app, or found later from that day's receipt
+    store_id: Mapped[str | None] = mapped_column(ForeignKey("stores.id", ondelete="SET NULL"))
+    store_source: Mapped[str | None] = mapped_column(String(8))  # app | receipt
+
+
 class Receipt(Base):
     __tablename__ = "receipts"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)

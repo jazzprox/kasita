@@ -58,6 +58,21 @@ def digest(kind: str, dry_run: bool) -> None:
             elif kind == "budget":
                 msg = dg.budget_alert(db, h.id)
                 title, tags = f"{h.name}: grocery budget", "money_with_wings"
+            elif kind == "securo-month":
+                # on the 1st: last month, Securo's grocery payments next to Kasita's receipts
+                from datetime import date, timedelta
+
+                from .services import securo, securo_month
+                last = (date.today().replace(day=1) - timedelta(days=1)).strftime("%Y-%m")
+                if not securo.status(db, h.id)["connected"]:
+                    print(f"{h.name}: Securo not connected, skipped")
+                    continue
+                try:
+                    msg = securo_month.monthly_message(securo_month.report(db, h.id, last))
+                except securo.SecuroError as e:
+                    print(f"{h.name}: Securo failed: {e}")
+                    continue
+                title, tags = f"{h.name}: last month's groceries", "receipt"
             elif kind == "freezer":
                 old = dg.forgotten_in_freezer(db, h.id)
                 msg = ("In the freezer for a while:\n" + "\n".join(f"• {x}" for x in old)) if old else None
@@ -90,7 +105,7 @@ def main() -> None:
     c.add_argument("--name", required=True)
     c.add_argument("--household")
     d = sub.add_parser("digest", help="push the expiry or weekly digest to ntfy")
-    d.add_argument("kind", choices=["expiry", "weekly", "freezer", "budget"])
+    d.add_argument("kind", choices=["expiry", "weekly", "freezer", "budget", "securo-month"])
     d.add_argument("--dry-run", action="store_true")
     g = sub.add_parser("geocode-stores", help="find stores without a location on the map (Nominatim)")
     g.add_argument("--redo", action="store_true", help="also look up stores found before (never hand-placed ones)")

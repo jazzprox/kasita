@@ -314,6 +314,11 @@ def securo_link(receipt_id: str, body: SecuroLinkIn, a: HouseholdAccess = Depend
         name = f"receipt-{(r.purchased_on or r.created_at.date()).isoformat()}.jpg"
         securo.link(conn, t["id"], photo=photo, photo_name=name,
                     note=securo.summary_note(db, r) if body.add_note else None, existing_notes=t.get("notes"))
+        if not t.get("category_id"):
+            # an uncategorised payment with a grocery receipt behind it is groceries
+            cid = securo.category_id(conn, "Groceries")
+            if cid:
+                securo.set_category(conn, t["id"], cid)
     except securo.SecuroError as e:
         raise HTTPException(502, str(e)) from e
     r.securo_transaction_id = t["id"]

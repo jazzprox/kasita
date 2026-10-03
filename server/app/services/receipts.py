@@ -470,6 +470,9 @@ def confirm(db: Session, receipt: Receipt, user_id: str | None, *, create_missin
         added += 1
     receipt.status = "confirmed"
     receipt.confirmed_at = datetime.now(timezone.utc)
+    db.flush()
+    from . import route
+    route.assign_from_receipt(db, receipt)  # that day's ticks happened in this store: learn its walk
     return {"added": added, "created_products": created, "skipped": skipped, "spending_only": spending}
 
 

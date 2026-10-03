@@ -262,7 +262,9 @@ def test_read_only_widget_key(client, jazz):
     assert key["read_only"] is True
     k = {"X-Api-Key": key["key"]}
     w = client.get(f"{base}/widget", headers=k).json()
-    assert w == {"shopping_title": "Shopping list (1)", "shopping": "• milk", "soon": ""}
+    assert {k: v for k, v in w.items() if k != "items"} == {"shopping_title": "Shopping list (1)", "shopping": "• milk",
+                                                             "soon": ""}
+    assert [i["name"] for i in w["items"]] == ["milk"]
     assert client.post(f"{base}/shopping", json={"name": "beer"}, headers=k).status_code == 403   # can only read
     # a member (not owner) may create a read-only key, not a full one
     inv = client.post(f"{base}/invites", headers=h).json()
