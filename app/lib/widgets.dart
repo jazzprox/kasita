@@ -1,8 +1,8 @@
-import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+import 'package:flutter/material.dart' hide Text;
+import 'i18n.dart';
 
-final dateFmt = DateFormat('d MMM');
-final dateFmtYear = DateFormat('d MMM yyyy');
+const dateFmt = LDateFormat('d MMM');
+const dateFmtYear = LDateFormat('d MMM yyyy');
 
 int daysUntil(DateTime d) {
   final today = DateUtils.dateOnly(DateTime.now());

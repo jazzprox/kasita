@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -8,6 +8,7 @@ import '../models.dart';
 import '../widgets.dart';
 import 'product_form.dart';
 import 'product_picker.dart';
+import '../i18n.dart';
 
 /// A barcode the household doesn't know yet: attach it to one of your products
 /// (e.g. something that came from a receipt), or create a new product.

@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -8,6 +8,7 @@ import '../api.dart';
 import '../main.dart';
 import '../models.dart';
 import '../widgets.dart';
+import '../i18n.dart';
 
 /// "Sign in with ChatGPT": the household's ChatGPT subscription reads receipts.
 /// The server does the sign-in (device code) and keeps the tokens; this screen
@@ -152,7 +153,7 @@ class _ChatGPTScreenState extends State<ChatGPTScreen> {
                     const SizedBox(height: 8),
                     DropdownButtonFormField<String>(
                       initialValue: st.model,
-                      decoration: const InputDecoration(labelText: 'Model', border: OutlineInputBorder()),
+                      decoration: InputDecoration(labelText: tr('Model'), border: OutlineInputBorder()),
                       items: [
                         for (final m in {...?_models, if (st.model != null) st.model!})
                           DropdownMenuItem(value: m, child: Text(m)),

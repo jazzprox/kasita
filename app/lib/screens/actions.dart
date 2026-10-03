@@ -1,10 +1,11 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:image_picker/image_picker.dart';
 
 import '../api.dart';
 import '../main.dart';
 import '../models.dart';
 import '../widgets.dart';
+import '../i18n.dart';
 
 /// Used one of something: take it out of stock, oldest-expiring first.
 Future<void> consumeOne(BuildContext context, Product p, {double qty = 1, bool spoiled = false}) async {
@@ -28,7 +29,7 @@ Future<void> consumeOne(BuildContext context, Product p, {double qty = 1, bool s
           content: Text('${spoiled ? "Threw away" : "Used"} ${p.name} · ${fmtQty(left)} left'),
           behavior: SnackBarBehavior.floating,
           action: SnackBarAction(
-            label: 'Undo',
+            label: tr('Undo'),
             onPressed: () async {
               try {
                 await s.api.undoStock(s.hid, events);
@@ -116,7 +117,7 @@ class _PurchaseSheetState extends State<_PurchaseSheet> {
         content: TextField(
           controller: name,
           autofocus: true,
-          decoration: const InputDecoration(labelText: 'Name'),
+          decoration: InputDecoration(labelText: tr('Name')),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
@@ -187,7 +188,7 @@ class _PurchaseSheetState extends State<_PurchaseSheet> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 IconButton(
-                  tooltip: 'Read the date from a photo',
+                  tooltip: tr('Read the date from a photo'),
                   icon: const Icon(Icons.photo_camera_outlined),
                   onPressed: () async {
                     final d = await dateFromPhoto(context);
@@ -214,7 +215,7 @@ class _PurchaseSheetState extends State<_PurchaseSheet> {
             controller: _price,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             decoration: InputDecoration(
-              labelText: 'Price each (optional)',
+              labelText: tr('Price each (optional)'),
               prefixText: '${s.household!.currency} ',
               border: const OutlineInputBorder(),
             ),
@@ -225,7 +226,7 @@ class _PurchaseSheetState extends State<_PurchaseSheet> {
               Expanded(
                 child: DropdownButtonFormField<String?>(
                   initialValue: _storeId,
-                  decoration: const InputDecoration(labelText: 'Store', border: OutlineInputBorder()),
+                  decoration: InputDecoration(labelText: tr('Store'), border: OutlineInputBorder()),
                   items: [
                     const DropdownMenuItem(value: null, child: Text('—')),
                     for (final st in s.stores) DropdownMenuItem(value: st.id, child: Text(st.name)),
@@ -233,13 +234,13 @@ class _PurchaseSheetState extends State<_PurchaseSheet> {
                   onChanged: (v) => setState(() => _storeId = v),
                 ),
               ),
-              IconButton(tooltip: 'New store', onPressed: _newStore, icon: const Icon(Icons.add_business_outlined)),
+              IconButton(tooltip: tr('New store'), onPressed: _newStore, icon: const Icon(Icons.add_business_outlined)),
             ],
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String?>(
             initialValue: _locationId,
-            decoration: const InputDecoration(labelText: 'Where it goes', border: OutlineInputBorder()),
+            decoration: InputDecoration(labelText: tr('Where it goes'), border: OutlineInputBorder()),
             items: [
               const DropdownMenuItem(value: null, child: Text('—')),
               for (final l in s.locations) DropdownMenuItem(value: l.id, child: Text(l.name)),
@@ -535,7 +536,7 @@ class _WeighedSheetState extends State<_WeighedSheet> {
           ),
           DropdownButtonFormField<String?>(
             initialValue: _storeId,
-            decoration: const InputDecoration(labelText: 'Store', border: OutlineInputBorder()),
+            decoration: InputDecoration(labelText: tr('Store'), border: OutlineInputBorder()),
             items: [
               const DropdownMenuItem(value: null, child: Text('—')),
               for (final st in s.stores) DropdownMenuItem(value: st.id, child: Text(st.name)),
@@ -545,7 +546,7 @@ class _WeighedSheetState extends State<_WeighedSheet> {
           const SizedBox(height: 12),
           DropdownButtonFormField<String?>(
             initialValue: _locationId,
-            decoration: const InputDecoration(labelText: 'Where it goes', border: OutlineInputBorder()),
+            decoration: InputDecoration(labelText: tr('Where it goes'), border: OutlineInputBorder()),
             items: [
               const DropdownMenuItem(value: null, child: Text('—')),
               for (final l in s.locations) DropdownMenuItem(value: l.id, child: Text(l.name)),

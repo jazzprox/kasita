@@ -1,10 +1,11 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:intl/intl.dart';
 
 import '../api.dart';
 import '../main.dart';
 import '../widgets.dart';
 import 'receipts.dart';
+import '../i18n.dart';
 
 /// A month of groceries from both sides: what Securo says was paid (its Groceries
 /// category, plus payments a receipt is linked to) and what Kasita's receipts say was
@@ -148,7 +149,7 @@ class _SecuroMonthScreenState extends State<SecuroMonthScreen> {
       title: Text('${p['description'] ?? 'Payment'}'),
       subtitle: Text(
         [
-          if (day != null) DateFormat('EEE d MMM').format(day),
+          if (day != null) LDateFormat('EEE d MMM').format(day),
           amount,
           if (p['category'] != null && p['category'] != 'Groceries') 'in ${p['category']}',
           if (!linked && !suggested) 'no receipt',
@@ -190,7 +191,7 @@ class _SecuroMonthScreenState extends State<SecuroMonthScreen> {
                 SizedBox(
                   width: 160,
                   child: Text(
-                    DateFormat('MMMM yyyy').format(_month),
+                    LDateFormat('MMMM yyyy').format(_month),
                     textAlign: TextAlign.center,
                     style: t.textTheme.titleMedium,
                   ),
@@ -230,7 +231,7 @@ class _SecuroMonthScreenState extends State<SecuroMonthScreen> {
                     title: Text('${x['store'] ?? 'Receipt'}'),
                     subtitle: Text(
                       [
-                        if (DateTime.tryParse('${x['date']}') case final d?) DateFormat('EEE d MMM').format(d),
+                        if (DateTime.tryParse('${x['date']}') case final d?) LDateFormat('EEE d MMM').format(d),
                         if (x['total'] != null) '$cur ${_n(x['total']).toStringAsFixed(2)}',
                       ].join(' · '),
                     ),

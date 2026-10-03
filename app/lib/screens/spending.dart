@@ -1,9 +1,10 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../api.dart';
 import '../main.dart';
 import '../nutri.dart';
 import '../widgets.dart';
+import '../i18n.dart';
 
 /// What groceries cost: priced purchases (receipts, or prices typed when buying),
 /// per category and per store, for the last week / month / quarter.
@@ -65,7 +66,7 @@ class _SpendingScreenState extends State<SpendingScreen> {
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           decoration: InputDecoration(
             prefixText: '${s.household!.currency} ',
-            helperText: 'Empty = no budget. Alerts at 80% and 100%.',
+            helperText: tr('Empty = no budget. Alerts at 80% and 100%.'),
           ),
         ),
         actions: [

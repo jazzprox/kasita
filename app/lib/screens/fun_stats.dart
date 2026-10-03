@@ -1,8 +1,9 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../api.dart';
 import '../main.dart';
 import '../widgets.dart';
+import '../i18n.dart';
 
 /// Light, fun numbers about how you shop, from booked receipts.
 class FunStatsScreen extends StatefulWidget {
@@ -43,7 +44,7 @@ class _FunStatsScreenState extends State<FunStatsScreen> {
         title: const Text('Fun stats'),
         actions: [
           PopupMenuButton<int>(
-            tooltip: 'Period',
+            tooltip: tr('Period'),
             icon: const Icon(Icons.date_range_outlined),
             onSelected: (d) {
               setState(() {

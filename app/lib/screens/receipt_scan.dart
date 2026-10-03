@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
@@ -8,6 +8,7 @@ import '../models.dart';
 import '../widgets.dart';
 import 'product_picker.dart';
 import 'unknown_barcode.dart';
+import '../i18n.dart';
 
 /// Small shops print departments ("COMESTIBELS 7.99"), not products: scanning the pack says what a
 /// line really was. A barcode the household knows is linked; one a product database knows becomes a
@@ -363,7 +364,7 @@ class _ReceiptScanAllScreenState extends State<ReceiptScanAllScreen> {
         title: const Text('Scan them all'),
         actions: [
           IconButton(
-            tooltip: 'Torch',
+            tooltip: tr('Torch'),
             icon: const Icon(Icons.flashlight_on_outlined),
             onPressed: () => _controller.toggleTorch(),
           ),
@@ -491,11 +492,11 @@ class _ReceiptScanAllScreenState extends State<ReceiptScanAllScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           IconButton(
-            tooltip: 'Move to another line',
+            tooltip: tr('Move to another line'),
             icon: const Icon(Icons.swap_vert),
             onPressed: _busy ? null : () => _move(x),
           ),
-          IconButton(tooltip: 'Undo', icon: const Icon(Icons.undo), onPressed: _busy ? null : () => _undo(x)),
+          IconButton(tooltip: tr('Undo'), icon: const Icon(Icons.undo), onPressed: _busy ? null : () => _undo(x)),
         ],
       ),
     );

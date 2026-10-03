@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -10,6 +10,7 @@ import '../main.dart';
 import '../nearby/nearby.dart';
 import '../widgets.dart';
 import 'stores.dart';
+import '../i18n.dart';
 
 /// Where you shop: a pin per store, bigger where you spend more. OpenStreetMap tiles.
 class StoreMapScreen extends StatefulWidget {
@@ -166,12 +167,12 @@ class _StoreMapScreenState extends State<StoreMapScreen> {
                 trailing: Wrap(
                   children: [
                     IconButton(
-                      tooltip: 'Look it up on the map',
+                      tooltip: tr('Look it up on the map'),
                       icon: const Icon(Icons.travel_explore),
                       onPressed: () => Navigator.pop(c, ('find', x['id'] as String)),
                     ),
                     IconButton(
-                      tooltip: 'Place it by hand',
+                      tooltip: tr('Place it by hand'),
                       icon: const Icon(Icons.add_location_alt_outlined),
                       onPressed: () => Navigator.pop(c, ('place', x['id'] as String)),
                     ),
@@ -245,7 +246,7 @@ class _StoreMapScreenState extends State<StoreMapScreen> {
                             width: 34,
                             height: 34,
                             child: Tooltip(
-                              message: 'Home',
+                              message: tr('Home'),
                               child: Icon(Icons.home, color: cs.secondary, size: 34),
                             ),
                           ),

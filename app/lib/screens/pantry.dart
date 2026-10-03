@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../main.dart';
 import '../models.dart';
@@ -9,6 +9,7 @@ import 'cook.dart';
 import 'pantry_pass.dart';
 import 'actions.dart';
 import 'product_detail.dart';
+import '../i18n.dart';
 
 class PantryScreen extends StatefulWidget {
   const PantryScreen({super.key});
@@ -52,12 +53,12 @@ class _PantryScreenState extends State<PantryScreen> {
         title: const Text('Pantry'),
         actions: [
           IconButton(
-            tooltip: 'What can I cook?',
+            tooltip: tr('What can I cook?'),
             icon: const Icon(Icons.restaurant_menu),
             onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CookScreen())),
           ),
           PopupMenuButton<String>(
-            tooltip: 'Sort',
+            tooltip: tr('Sort'),
             icon: const Icon(Icons.sort),
             initialValue: _sort,
             onSelected: (v) {
@@ -97,7 +98,7 @@ class _PantryScreenState extends State<PantryScreen> {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
                   child: SearchBar(
-                    hintText: 'Search pantry',
+                    hintText: tr('Search pantry'),
                     leading: const Icon(Icons.search),
                     onChanged: (v) => setState(() => _q = v),
                   ),
@@ -211,7 +212,7 @@ class _PantryScreenState extends State<PantryScreen> {
         children: [
           if (frozen) FrozenChip(frozenSince!) else ExpiryChip(p.nextBestBefore),
           IconButton(
-            tooltip: 'Used one',
+            tooltip: tr('Used one'),
             icon: const Icon(Icons.remove_circle_outline),
             onPressed: () => consumeOne(context, p),
           ),

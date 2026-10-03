@@ -81,6 +81,7 @@ flutter:
   # The app icon ("basket house"), also used as the logo on sign-in and the side rail.
   assets:
     - assets/brand/kasita.png
+    - assets/i18n/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

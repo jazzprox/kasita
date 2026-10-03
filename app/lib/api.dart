@@ -256,6 +256,16 @@ class Api {
   Future<Map<String, dynamic>> readDate(String hid, Uint8List photo) async =>
       Map<String, dynamic>.from(await upload('${_h(hid)}/stock/read-date', [(photo, 'date.jpg')]));
 
+  /// What shops that publish prices online (Mangusa) charge for this product, matched by barcode.
+  Future<List<Map<String, dynamic>>> marketPrices(String hid, String pid) async => [
+    for (final x in await get('${_h(hid)}/products/$pid/market') as List) Map<String, dynamic>.from(x),
+  ];
+
+  /// Open shopping items that an online shop lists: item id -> offer.
+  Future<Map<String, Map<String, dynamic>>> shoppingMarket(String hid) async => {
+    for (final e in (await get('${_h(hid)}/shopping/market') as Map).entries) e.key as String: Map<String, dynamic>.from(e.value),
+  };
+
   /// A deli / scale label photo -> {name, weight_kg, price_per_kg, total, best_before, packed_on}.
   Future<Map<String, dynamic>> readLabel(String hid, Uint8List photo) async =>
       Map<String, dynamic>.from(await upload('${_h(hid)}/stock/read-label', [(photo, 'label.jpg')]));
@@ -296,6 +306,14 @@ class Api {
   Future<Map<String, dynamic>> saveRecipe(String hid, Map<String, dynamic> body) async =>
       Map<String, dynamic>.from(await post('${_h(hid)}/recipes', body));
   Future<void> deleteRecipe(String hid, String id) => delete('${_h(hid)}/recipes/$id');
+  /// A proposed week of dinners from the pantry and the cheapest known prices (saves nothing).
+  Future<Map<String, dynamic>> planSuggest(String hid, {int days = 7, String? note}) async =>
+      Map<String, dynamic>.from(await post('${_h(hid)}/plan/suggest', {'days': days, if (note != null && note.isNotEmpty) 'note': note}));
+
+  /// Accept a proposal: recipes, the week plan and the shopping list are made. Returns the names put on the list.
+  Future<List<String>> planApply(String hid, List<dynamic> days) async =>
+      List<String>.from((await post('${_h(hid)}/plan/apply', {'days': days}))['added_to_list'] as List);
+
   /// A recipe from a web page (its schema.org data, else ChatGPT reads it).
   Future<Map<String, dynamic>> importRecipe(String hid, String url) async =>
       Map<String, dynamic>.from(await post('${_h(hid)}/recipes/import', {'url': url}));
@@ -318,6 +336,22 @@ class Api {
       Product.fromJson(await post('${_h(hid)}/products/$pid/photo/restore'));
   Future<Map<String, dynamic>> createApiKey(String hid, String name, {bool readOnly = false}) async =>
       Map<String, dynamic>.from(await post('${_h(hid)}/api-keys', {'name': name, 'read_only': readOnly}));
+  // --- server admin (users with is_admin) ------------------------------------------
+  Future<Map<String, dynamic>> me() async => Map<String, dynamic>.from(await get('/api/auth/me'));
+  Future<Map<String, dynamic>> adminOverview() async => Map<String, dynamic>.from(await get('/api/admin/overview'));
+  Future<List<Map<String, dynamic>>> adminUsers() async => [
+    for (final u in await get('/api/admin/users') as List) Map<String, dynamic>.from(u),
+  ];
+  Future<List<Map<String, dynamic>>> adminHouseholds() async => [
+    for (final h in await get('/api/admin/households') as List) Map<String, dynamic>.from(h),
+  ];
+  Future<String> adminResetPassword(String userId) async =>
+      (await post('/api/admin/users/$userId/reset-password'))['temporary_password'] as String;
+  Future<int> adminSignOut(String userId) async =>
+      (await post('/api/admin/users/$userId/sign-out'))['signed_out_sessions'] as int;
+  Future<void> adminSetAdmin(String userId, bool isAdmin) =>
+      patch('/api/admin/users/$userId', {'is_admin': isAdmin});
+
   Future<List<Map<String, dynamic>>> apiKeys(String hid) async => [
     for (final k in await get('${_h(hid)}/api-keys') as List) Map<String, dynamic>.from(k),
   ];

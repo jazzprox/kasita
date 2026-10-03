@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:flutter/services.dart';
 
 import '../api.dart';
@@ -8,6 +8,7 @@ import '../nearby/nearby.dart';
 import '../updates/update_ui.dart';
 import '../widgets.dart';
 import 'activity.dart';
+import 'admin.dart';
 import 'agents.dart';
 import 'bills.dart';
 import 'chatgpt.dart';
@@ -20,6 +21,7 @@ import 'securo.dart';
 import 'securo_month.dart';
 import 'spending.dart';
 import 'stores.dart';
+import '../i18n.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -29,6 +31,7 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   List<Member>? _members;
+  bool _isAdmin = false; // runs this Kasita server: sees everyone
 
   @override
   void didChangeDependencies() {
@@ -40,6 +43,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final s = Kasita.read(context);
     final m = await s.api.members(s.hid);
     if (mounted) setState(() => _members = m);
+    try {
+      final me = await s.api.me();
+      if (mounted) setState(() => _isAdmin = me['is_admin'] == true);
+    } catch (_) {}
   }
 
   Future<void> _invite() async {
@@ -208,6 +215,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ChatGPTScreen())),
           ),
           ListTile(
+            leading: const Icon(Icons.language),
+            title: const Text('Language'),
+            subtitle: Text(supportedLangs[appLang.value] ?? 'English'),
+            onTap: () async {
+              final pick = await showModalBottomSheet<String>(
+                context: context,
+                showDragHandle: true,
+                builder: (c) => SafeArea(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (final e in supportedLangs.entries)
+                        ListTile(
+                          leading: Icon(e.key == appLang.value ? Icons.radio_button_checked : Icons.radio_button_unchecked),
+                          title: Text(e.value),
+                          onTap: () => Navigator.pop(c, e.key),
+                        ),
+                      const Padding(
+                        padding: EdgeInsets.fromLTRB(16, 4, 16, 12),
+                        child: Text(
+                          'Texts the app does not know in your language stay in English.',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+              if (pick != null && pick != appLang.value) await setLang(pick); // the whole app restarts in the new language
+            },
+          ),
+          if (_isAdmin)
+            ListTile(
+              leading: const Icon(Icons.admin_panel_settings_outlined),
+              title: const Text('Server admin'),
+              subtitle: const Text('Everyone on this Kasita: users, households, sessions'),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AdminScreen())),
+            ),
+          ListTile(
             leading: const Icon(Icons.smart_toy_outlined),
             title: const Text('AI agents'),
             subtitle: const Text('Let OpenClaw, Hermes or Claude use Kasita (MCP)'),
@@ -313,18 +359,18 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
             controller: _current,
             obscureText: true,
             autofillHints: const [AutofillHints.password],
-            decoration: const InputDecoration(labelText: 'Current password'),
+            decoration: InputDecoration(labelText: tr('Current password')),
           ),
           TextField(
             controller: _next,
             obscureText: true,
             autofillHints: const [AutofillHints.newPassword],
-            decoration: const InputDecoration(labelText: 'New password', helperText: 'At least 10 characters'),
+            decoration: InputDecoration(labelText: tr('New password'), helperText: tr('At least 10 characters')),
           ),
           TextField(
             controller: _again,
             obscureText: true,
-            decoration: const InputDecoration(labelText: 'New password again'),
+            decoration: InputDecoration(labelText: tr('New password again')),
             onSubmitted: (_) => _busy ? null : _save(),
           ),
           if (_error != null)

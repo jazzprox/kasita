@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../main.dart';
 import '../models.dart';
@@ -6,6 +6,7 @@ import '../widgets.dart';
 import 'barcode_run.dart';
 import 'product_detail.dart';
 import 'product_form.dart';
+import '../i18n.dart';
 
 class ProductsScreen extends StatefulWidget {
   const ProductsScreen({super.key});
@@ -57,7 +58,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
                   child: SearchBar(
-                    hintText: 'Search products',
+                    hintText: tr('Search products'),
                     leading: const Icon(Icons.search),
                     onChanged: (v) => setState(() => _q = v),
                   ),

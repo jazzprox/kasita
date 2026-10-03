@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
+import 'i18n.dart';
 
 /// Open Food Facts' Nutri-Score letter (a..e) as the familiar coloured badge.
 class NutriScoreBadge extends StatelessWidget {

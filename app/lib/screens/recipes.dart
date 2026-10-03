@@ -1,10 +1,11 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../api.dart';
 import '../main.dart';
 import '../models.dart';
 import '../widgets.dart';
+import '../i18n.dart';
 
 /// Pick a day for a recipe (today .. 4 weeks) and plan it.
 Future<void> planRecipe(BuildContext context, Map<String, dynamic> recipe) async {
@@ -15,7 +16,7 @@ Future<void> planRecipe(BuildContext context, Map<String, dynamic> recipe) async
     initialDate: now,
     firstDate: now,
     lastDate: now.add(const Duration(days: 28)),
-    helpText: 'Plan "${recipe['title']}" for',
+    helpText: tr('Plan "${recipe['title']}" for'),
   );
   if (d == null || !context.mounted) return;
   try {
@@ -41,7 +42,7 @@ Future<String?> importRecipe(BuildContext context, {String? url}) async {
           controller: ctl,
           autofocus: true,
           keyboardType: TextInputType.url,
-          decoration: const InputDecoration(hintText: 'https://…', helperText: 'Any recipe page; most sites work'),
+          decoration: InputDecoration(hintText: tr('https://…'), helperText: tr('Any recipe page; most sites work')),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(c), child: const Text('Cancel')),
@@ -244,7 +245,7 @@ class _RecipeScreenState extends State<RecipeScreen> {
                 : 'Not enough: ${(r['short'] as List).join(', ')}',
           ),
           action: SnackBarAction(
-            label: 'Undo',
+            label: tr('Undo'),
             onPressed: () async {
               await s.api.undoStock(s.hid, events);
               s.changed();
@@ -269,13 +270,13 @@ class _RecipeScreenState extends State<RecipeScreen> {
         actions: [
           if (r != null && r['source_url'] != null)
             IconButton(
-              tooltip: 'Open the recipe page',
+              tooltip: tr('Open the recipe page'),
               icon: const Icon(Icons.open_in_new),
               onPressed: () => launchUrl(Uri.parse(r['source_url']), mode: LaunchMode.externalApplication),
             ),
           if (r != null)
             IconButton(
-              tooltip: 'Delete',
+              tooltip: tr('Delete'),
               icon: const Icon(Icons.delete_outline),
               onPressed: () async {
                 await s.api.deleteRecipe(s.hid, widget.recipeId);
@@ -392,6 +393,121 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
     if (mounted) setState(() => _days = d);
   }
 
+  /// Ask for a week of dinners built around what's at home and the cheapest known prices; show it with its
+  /// price; only "Use this plan" saves anything.
+  Future<void> _planWeek() async {
+    final s = Kasita.read(context);
+    final ctl = TextEditingController();
+    final wishes = await showDialog<String>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Plan my week'),
+        content: TextField(
+          controller: ctl,
+          decoration: InputDecoration(
+            labelText: tr('Any wishes? (optional)'),
+            helperText: tr('e.g. "fish on Friday", "nothing spicy", "quick on weekdays"'),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(c, ctl.text.trim()), child: const Text('Plan 7 days')),
+        ],
+      ),
+    );
+    if (wishes == null || !mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const AlertDialog(
+        content: Row(children: [CircularProgressIndicator(), SizedBox(width: 20), Expanded(child: Text('Planning…'))]),
+      ),
+    );
+    Map<String, dynamic> plan;
+    try {
+      plan = await s.api.planSuggest(s.hid, note: wishes);
+    } on ApiException catch (e) {
+      if (mounted) {
+        Navigator.of(context).pop();
+        toast(context, e.message, error: true);
+      }
+      return;
+    }
+    if (!mounted) return;
+    Navigator.of(context).pop();
+    final days = plan['days'] as List;
+    if (days.isEmpty) return toast(context, 'No plan came back; try again.', error: true);
+    final cur = plan['currency'];
+    final cost = double.tryParse('${plan['est_cost']}') ?? 0;
+    final ok = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (c) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.85,
+        builder: (c, scroll) => Column(
+          children: [
+            ListTile(
+              title: Text('$cur ${cost.toStringAsFixed(2)} to buy'),
+              subtitle: Text(
+                [
+                  '${days.length} dinners',
+                  if ((plan['unpriced'] ?? 0) > 0) '${plan['unpriced']} item(s) without a known price',
+                  if (plan['budget'] != null) 'budget $cur ${double.parse('${plan['budget']}').toStringAsFixed(0)}',
+                ].join(' · '),
+              ),
+            ),
+            Expanded(
+              child: ListView(
+                controller: scroll,
+                children: [
+                  for (final d in days)
+                    ListTile(
+                      leading: CircleAvatar(child: Text(dayLetter(DateTime.parse(d['day'])))),
+                      title: Text('${d['title']}'),
+                      subtitle: Text(
+                        [
+                          if ((d['uses'] as List).isNotEmpty) 'from home: ${[for (final u in d['uses']) u['name']].join(', ')}',
+                          if ((d['buy'] as List).isNotEmpty)
+                            'buy: ${[for (final b in d['buy']) '${b['name']}${b['price'] == null ? '' : ' ${double.parse('${b['price']}').toStringAsFixed(2)}'}${b['repeat'] == true ? ' (again)' : ''}'].join(', ')}',
+                          if ('${d['why']}'.isNotEmpty) '${d['why']}',
+                        ].join('\n'),
+                      ),
+                      isThreeLine: true,
+                    ),
+                ],
+              ),
+            ),
+            SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                child: Row(
+                  children: [
+                    Expanded(child: OutlinedButton(onPressed: () => Navigator.pop(c, false), child: const Text('Not now'))),
+                    const SizedBox(width: 12),
+                    Expanded(child: FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Use this plan'))),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      final added = await s.api.planApply(s.hid, days);
+      s.changed();
+      if (mounted) {
+        toast(context, added.isEmpty ? 'Plan saved: you have everything' : 'Plan saved; ${added.length} item(s) on the shopping list');
+        _load();
+      }
+    } on ApiException catch (e) {
+      if (mounted) toast(context, e.message, error: true);
+    }
+  }
+
   Future<void> _edit(Map<String, dynamic> day) async {
     final s = Kasita.read(context);
     final recipes = await s.api.recipes(s.hid);
@@ -450,7 +566,16 @@ class _WeekPlanScreenState extends State<WeekPlanScreen> {
   Widget build(BuildContext context) {
     final t = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Week plan')),
+      appBar: AppBar(
+        title: const Text('Week plan'),
+        actions: [
+          TextButton.icon(
+            onPressed: _planWeek,
+            icon: const Icon(Icons.auto_awesome),
+            label: const Text('Plan my week'),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
           final s = Kasita.read(context);

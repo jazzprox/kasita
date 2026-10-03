@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:home_widget/home_widget.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import 'package:quick_actions/quick_actions.dart';
@@ -22,6 +22,7 @@ import 'products.dart';
 import 'scan.dart';
 import 'settings.dart';
 import 'shopping.dart';
+import '../i18n.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -114,10 +115,10 @@ class _HomeScreenState extends State<HomeScreen> {
       updater.start();
       _lifecycle = AppLifecycleListener(onResume: updater.maybeCheck);
     }
-    actions.setShortcutItems(const [
-      ShortcutItem(type: 'pass', localizedTitle: 'Pantry pass'),
-      ShortcutItem(type: 'receipt', localizedTitle: 'Scan receipt'),
-      ShortcutItem(type: 'shopping', localizedTitle: 'Shopping list'),
+    actions.setShortcutItems([
+      ShortcutItem(type: 'pass', localizedTitle: tr('Pantry pass')),
+      ShortcutItem(type: 'receipt', localizedTitle: tr('Scan receipt')),
+      ShortcutItem(type: 'shopping', localizedTitle: tr('Shopping list')),
     ]);
   }
 
@@ -184,7 +185,7 @@ class _HomeScreenState extends State<HomeScreen> {
             onDestinationSelected: (i) => setState(() => _tab = i),
             destinations: [
               for (final d in _destinations)
-                NavigationDestination(icon: Icon(d.$1), selectedIcon: Icon(d.$2), label: d.$3),
+                NavigationDestination(icon: Icon(d.$1), selectedIcon: Icon(d.$2), label: tr(d.$3)),
             ],
           ),
         ],

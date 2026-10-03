@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
@@ -13,6 +13,7 @@ import 'chatgpt.dart';
 import 'product_picker.dart';
 import 'receipt_scan.dart';
 import 'securo.dart';
+import '../i18n.dart';
 
 final _money = NumberFormat('#,##0.00');
 String money(double? v) => v == null ? '—' : _money.format(v);
@@ -481,8 +482,8 @@ class _ReceiptReviewScreenState extends State<ReceiptReviewScreen> {
         title: const Text('Receipt'),
         actions: [
           if (r != null && editable && !r.reading)
-            IconButton(tooltip: 'Read again', icon: const Icon(Icons.refresh), onPressed: _busy ? null : _reread),
-          if (r != null) IconButton(tooltip: 'Delete', icon: const Icon(Icons.delete_outline), onPressed: _delete),
+            IconButton(tooltip: tr('Read again'), icon: const Icon(Icons.refresh), onPressed: _busy ? null : _reread),
+          if (r != null) IconButton(tooltip: tr('Delete'), icon: const Icon(Icons.delete_outline), onPressed: _delete),
         ],
       ),
       bottomNavigationBar: r != null && r.status == 'parsed'
@@ -686,7 +687,7 @@ class _LineTile extends StatelessWidget {
           ),
           if (onScan != null)
             IconButton(
-              tooltip: 'Scan the pack',
+              tooltip: tr('Scan the pack'),
               icon: const Icon(Icons.qr_code_scanner),
               color: l.department && l.productId == null ? Colors.orange.shade800 : null,
               onPressed: onScan,
@@ -843,7 +844,7 @@ class _LineEditorState extends State<_LineEditor> {
             const SizedBox(height: 8),
             TextField(
               controller: _name,
-              decoration: const InputDecoration(labelText: 'Name', border: OutlineInputBorder()),
+              decoration: InputDecoration(labelText: tr('Name'), border: OutlineInputBorder()),
             ),
             const SizedBox(height: 12),
             Row(
@@ -852,7 +853,7 @@ class _LineEditorState extends State<_LineEditor> {
                   child: TextField(
                     controller: _qty,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(labelText: 'Quantity', border: OutlineInputBorder()),
+                    decoration: InputDecoration(labelText: tr('Quantity'), border: OutlineInputBorder()),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -860,7 +861,7 @@ class _LineEditorState extends State<_LineEditor> {
                   child: TextField(
                     controller: _total,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(labelText: 'Line total', border: OutlineInputBorder()),
+                    decoration: InputDecoration(labelText: tr('Line total'), border: OutlineInputBorder()),
                   ),
                 ),
               ],
@@ -883,7 +884,7 @@ class _LineEditorState extends State<_LineEditor> {
                   children: [
                     if (_productId != null)
                       IconButton(
-                        tooltip: 'Unlink',
+                        tooltip: tr('Unlink'),
                         icon: const Icon(Icons.close),
                         onPressed: () => setState(() {
                           _productId = null;
@@ -892,7 +893,7 @@ class _LineEditorState extends State<_LineEditor> {
                       ),
                     if (line != null)
                       IconButton(
-                        tooltip: 'Scan the pack',
+                        tooltip: tr('Scan the pack'),
                         icon: const Icon(Icons.qr_code_scanner),
                         onPressed: _busy ? null : _scan,
                       ),

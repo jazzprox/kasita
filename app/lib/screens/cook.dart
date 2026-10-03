@@ -1,9 +1,10 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../api.dart';
 import '../main.dart';
 import '../widgets.dart';
 import 'recipes.dart';
+import '../i18n.dart';
 
 /// Meal ideas from what is at home (soon-expiring things first), by the household's ChatGPT.
 class CookScreen extends StatefulWidget {
@@ -72,7 +73,7 @@ class _CookScreenState extends State<CookScreen> {
         title: const Text('What can I cook?'),
         actions: [
           IconButton(
-            tooltip: 'Saved recipes',
+            tooltip: tr('Saved recipes'),
             icon: const Icon(Icons.menu_book_outlined),
             onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const RecipesScreen())),
           ),
@@ -83,9 +84,9 @@ class _CookScreenState extends State<CookScreen> {
         children: [
           TextField(
             controller: _note,
-            decoration: const InputDecoration(
-              labelText: 'Wishes (optional)',
-              hintText: 'quick, no oven, something with rice…',
+            decoration: InputDecoration(
+              labelText: tr('Wishes (optional)'),
+              hintText: tr('quick, no oven, something with rice…'),
               border: OutlineInputBorder(),
             ),
             onSubmitted: (_) => _busy ? null : _ask(),

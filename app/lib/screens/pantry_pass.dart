@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
@@ -8,6 +8,7 @@ import '../models.dart';
 import '../widgets.dart';
 import 'actions.dart';
 import 'unknown_barcode.dart';
+import '../i18n.dart';
 
 enum PassMode { add, use }
 
@@ -161,7 +162,7 @@ class _PantryPassScreenState extends State<PantryPassScreen> {
         title: const Text('Pantry pass'),
         actions: [
           IconButton(
-            tooltip: 'Torch',
+            tooltip: tr('Torch'),
             icon: const Icon(Icons.flashlight_on_outlined),
             onPressed: () => _controller.toggleTorch(),
           ),
@@ -254,12 +255,12 @@ class _PantryPassScreenState extends State<PantryPassScreen> {
                       children: [
                         if (adding && x.batches.isNotEmpty)
                           IconButton(
-                            tooltip: 'Photo of its date',
+                            tooltip: tr('Photo of its date'),
                             icon: const Icon(Icons.event_outlined),
                             onPressed: _busy ? null : () => _dateLast(x),
                           ),
                         IconButton(
-                          tooltip: 'Take the last one back',
+                          tooltip: tr('Take the last one back'),
                           icon: const Icon(Icons.remove_circle_outline),
                           onPressed: _busy ? null : () => _undo(x),
                         ),

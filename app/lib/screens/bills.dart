@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:image_picker/image_picker.dart';
 
 import '../api.dart';
@@ -10,6 +10,7 @@ import '../models.dart';
 import '../widgets.dart';
 import 'receipts.dart' show money;
 import 'securo.dart';
+import '../i18n.dart';
 
 /// Utility bills (Aqualectra, Selikor, Flow...): photograph them, ChatGPT reads
 /// what each service costs, then tick the bills that were paid together and
@@ -105,12 +106,12 @@ class _BillsScreenState extends State<BillsScreen> {
             TextField(
               controller: biller,
               autofocus: true,
-              decoration: const InputDecoration(labelText: 'Who you paid', hintText: 'Aqualectra, Flow…'),
+              decoration: InputDecoration(labelText: tr('Who you paid'), hintText: tr('Aqualectra, Flow…')),
             ),
             TextField(
               controller: amount,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(labelText: 'Amount'),
+              decoration: InputDecoration(labelText: tr('Amount')),
             ),
           ],
         ),
@@ -342,7 +343,7 @@ class _BillsScreenState extends State<BillsScreen> {
             children: [
               DropdownButtonFormField<SecuroAccount>(
                 initialValue: account,
-                decoration: const InputDecoration(labelText: 'Paid from'),
+                decoration: InputDecoration(labelText: tr('Paid from')),
                 items: [
                   for (final a in accounts)
                     DropdownMenuItem(value: a, child: Text('${a.name}${a.currency == null ? '' : ' (${a.currency})'}')),
@@ -351,7 +352,7 @@ class _BillsScreenState extends State<BillsScreen> {
               ),
               TextField(
                 controller: what,
-                decoration: const InputDecoration(labelText: 'Description'),
+                decoration: InputDecoration(labelText: tr('Description')),
               ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
@@ -541,7 +542,7 @@ class _BillsScreenState extends State<BillsScreen> {
         children: [
           Text(b.total == null ? '' : '${b.currency ?? ''} ${money(b.total)}'),
           PopupMenuButton<String>(
-            tooltip: 'Edit, retake, delete',
+            tooltip: tr('Edit, retake, delete'),
             onSelected: (v) => _rowAction(b, v),
             itemBuilder: (_) => billActions(b),
           ),
@@ -904,16 +905,16 @@ class _BillScreenState extends State<BillScreen> {
                   ),
                 TextField(
                   controller: _biller,
-                  decoration: const InputDecoration(labelText: 'Biller'),
+                  decoration: InputDecoration(labelText: tr('Biller')),
                   onChanged: changed,
                 ),
                 TextField(
                   controller: _total,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   decoration: InputDecoration(
-                    labelText: 'Amount paid',
+                    labelText: tr('Amount paid'),
                     suffixText: b.currency,
-                    helperText: 'What you paid for this bill; change it if you paid a different amount',
+                    helperText: tr('What you paid for this bill; change it if you paid a different amount'),
                   ),
                   onChanged: changed,
                 ),
@@ -937,7 +938,7 @@ class _BillScreenState extends State<BillScreen> {
                         ),
                       ),
                       IconButton(
-                        tooltip: 'Remove',
+                        tooltip: tr('Remove'),
                         icon: const Icon(Icons.close),
                         onPressed: () => setState(() {
                           _lines.removeAt(i);
@@ -968,12 +969,12 @@ class _BillScreenState extends State<BillScreen> {
                 ),
                 TextField(
                   controller: _period,
-                  decoration: const InputDecoration(labelText: 'Period'),
+                  decoration: InputDecoration(labelText: tr('Period')),
                   onChanged: changed,
                 ),
                 TextField(
                   controller: _account,
-                  decoration: const InputDecoration(labelText: 'Customer / account number'),
+                  decoration: InputDecoration(labelText: tr('Customer / account number')),
                   onChanged: changed,
                 ),
                 ListTile(

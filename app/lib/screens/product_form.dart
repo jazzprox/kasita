@@ -1,9 +1,10 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../api.dart';
 import '../main.dart';
 import '../models.dart';
 import '../widgets.dart';
+import '../i18n.dart';
 
 /// Create or edit a product. When created from a scan, the barcode and
 /// whatever the product databases knew come in as [prefill].
@@ -135,12 +136,12 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
               autofocus: pre != null && !pre.found,
               textCapitalization: TextCapitalization.sentences,
               validator: (v) => (v == null || v.trim().isEmpty) ? 'Give it a name' : null,
-              decoration: const InputDecoration(labelText: 'Name', border: OutlineInputBorder()),
+              decoration: InputDecoration(labelText: tr('Name'), border: OutlineInputBorder()),
             ),
             const SizedBox(height: 12),
             TextFormField(
               controller: _brand,
-              decoration: const InputDecoration(labelText: 'Brand', border: OutlineInputBorder()),
+              decoration: InputDecoration(labelText: tr('Brand'), border: OutlineInputBorder()),
             ),
             const SizedBox(height: 12),
             LayoutBuilder(
@@ -153,7 +154,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                     : null,
                 enableFilter: false,
                 requestFocusOnTap: true,
-                dropdownMenuEntries: [for (final c in _categories) DropdownMenuEntry(value: c, label: c)],
+                dropdownMenuEntries: [for (final c in _categories) DropdownMenuEntry(value: c, label: tr(c))],
                 onSelected: (c) => _category.text = c ?? '',
               ),
             ),
@@ -163,8 +164,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                 Expanded(
                   child: TextFormField(
                     controller: _unit,
-                    decoration: const InputDecoration(
-                      labelText: 'Counted in (pcs, pack, kg)',
+                    decoration: InputDecoration(
+                      labelText: tr('Counted in (pcs, pack, kg)'),
                       border: OutlineInputBorder(),
                     ),
                   ),
@@ -174,9 +175,9 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                   child: TextFormField(
                     controller: _min,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(
-                      labelText: 'Keep at least',
-                      helperText: 'Below this: onto the list',
+                    decoration: InputDecoration(
+                      labelText: tr('Keep at least'),
+                      helperText: tr('Below this: onto the list'),
                       border: OutlineInputBorder(),
                     ),
                   ),
@@ -191,9 +192,9 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                   child: TextFormField(
                     controller: _size,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(
-                      labelText: 'Pack size',
-                      helperText: 'For prices per kg / litre (empty: read from the barcode)',
+                    decoration: InputDecoration(
+                      labelText: tr('Pack size'),
+                      helperText: tr('For prices per kg / litre (empty: read from the barcode)'),
                       border: OutlineInputBorder(),
                     ),
                   ),
@@ -215,9 +216,9 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
             TextFormField(
               controller: _shelf,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Usually keeps for (days)',
-                helperText: 'Pre-fills the best-before date when you buy it',
+              decoration: InputDecoration(
+                labelText: tr('Usually keeps for (days)'),
+                helperText: tr('Pre-fills the best-before date when you buy it'),
                 border: OutlineInputBorder(),
               ),
             ),
@@ -225,16 +226,16 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
             TextFormField(
               controller: _openDays,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Keeps once opened (days)',
-                helperText: 'Tapping Opened sets its date to this many days from then (milk 5, salsa 14)',
+              decoration: InputDecoration(
+                labelText: tr('Keeps once opened (days)'),
+                helperText: tr('Tapping Opened sets its date to this many days from then (milk 5, salsa 14)'),
                 border: OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String?>(
               initialValue: _location,
-              decoration: const InputDecoration(labelText: 'Usually stored in', border: OutlineInputBorder()),
+              decoration: InputDecoration(labelText: tr('Usually stored in'), border: OutlineInputBorder()),
               items: [
                 const DropdownMenuItem(value: null, child: Text('—')),
                 for (final l in s.locations) DropdownMenuItem(value: l.id, child: Text(l.name)),

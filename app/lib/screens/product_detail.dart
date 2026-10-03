@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
+import 'package:url_launcher/url_launcher.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../api.dart';
@@ -11,6 +12,7 @@ import '../widgets.dart';
 import 'actions.dart';
 import 'product_picker.dart';
 import 'product_form.dart';
+import '../i18n.dart';
 
 class ProductDetailScreen extends StatefulWidget {
   final String productId;
@@ -24,6 +26,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   List<StockEntry> _entries = [];
   List<PricePoint> _prices = [];
   List<Map<String, dynamic>> _compare = const [];
+  List<Map<String, dynamic>> _market = const []; // online shop prices (Mangusa)
   int _seen = -1;
 
   Future<void> _share() async {
@@ -211,13 +214,17 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     final p = await s.api.product(s.hid, widget.productId);
     final stock = await s.api.stock(s.hid);
     final prices = await s.api.prices(s.hid, widget.productId);
-    List<Map<String, dynamic>> compare = const [];
+    List<Map<String, dynamic>> compare = const [], market = const [];
     try {
       compare = await s.api.compareSizes(s.hid, widget.productId);
+    } catch (_) {}
+    try {
+      market = await s.api.marketPrices(s.hid, widget.productId);
     } catch (_) {}
     if (!mounted) return;
     setState(() {
       _compare = compare;
+      _market = market;
       _p = p;
       _entries = stock.where((x) => x.product.id == p.id).expand((x) => x.entries).toList();
       _prices = prices;
@@ -232,6 +239,36 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       _seen = rev;
       _load();
     }
+  }
+
+  /// "Mangusa Hypermarket (online): XCG 10.80", with what you last paid for comparison.
+  Widget _marketTile(Map<String, dynamic> m) {
+    final t = Theme.of(context);
+    final cur = Kasita.read(context).household!.currency;
+    final price = double.parse('${m['price']}');
+    final prev = m['previous_price'] == null ? null : double.parse('${m['previous_price']}');
+    final mine = _prices.isEmpty ? null : _prices.first;
+    final checked = DateTime.tryParse('${m['checked']}')?.toLocal();
+    final age = checked == null ? '' : DateTime.now().difference(checked).inDays;
+    final bits = <String>[
+      if (m['on_sale'] == true) 'on sale (was ${double.parse('${m['regular_price']}').toStringAsFixed(2)})',
+      if (m['on_sale'] != true && prev != null && prev != price) '${price < prev ? 'down' : 'up'} from ${prev.toStringAsFixed(2)}',
+      if (m['in_stock'] != true) 'out of stock',
+      if (m['pack_note'] != null) '${m['pack_note']}',
+      if (mine != null && (mine.storeName ?? '').isNotEmpty) 'you paid ${mine.unitPrice.toStringAsFixed(2)} at ${mine.storeName}',
+      if (age is int) (age == 0 ? 'checked today' : 'checked $age day${age == 1 ? '' : 's'} ago'),
+    ];
+    return Card(
+      margin: const EdgeInsets.only(top: 12),
+      child: ListTile(
+        leading: Icon(Icons.storefront_outlined, color: m['on_sale'] == true ? t.colorScheme.tertiary : null),
+        title: Text('${m['store']} (online): $cur ${price.toStringAsFixed(2)}',
+            style: const TextStyle(fontWeight: FontWeight.w600)),
+        subtitle: Text(bits.join(' · ')),
+        trailing: m['url'] == null ? null : const Icon(Icons.open_in_new, size: 18),
+        onTap: m['url'] == null ? null : () => launchUrl(Uri.parse(m['url']), mode: LaunchMode.externalApplication),
+      ),
+    );
   }
 
   /// Newest price at each store (prices come newest first), cheapest marked.
@@ -259,7 +296,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         title: Text(p.name),
         actions: [
           IconButton(
-            tooltip: 'Edit',
+            tooltip: tr('Edit'),
             icon: const Icon(Icons.edit_outlined),
             onPressed: () =>
                 Navigator.of(context).push(MaterialPageRoute(builder: (_) => ProductFormScreen(product: p))),
@@ -336,6 +373,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               ],
             ),
           ],
+          for (final m in _market) _marketTile(m),
           const SizedBox(height: 16),
           Wrap(
             spacing: 8,

@@ -1,10 +1,11 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../widgets.dart';
 import 'update_logic.dart';
 import 'updater.dart';
+import '../i18n.dart';
 
 /// Update: download (cancellable), make sure Kasita may install apps, open Android's installer.
 Future<void> runUpdate(BuildContext context) async {

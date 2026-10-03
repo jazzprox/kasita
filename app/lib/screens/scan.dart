@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../api.dart';
@@ -9,6 +9,7 @@ import 'actions.dart';
 import 'product_detail.dart';
 import 'unknown_barcode.dart';
 import 'receipts.dart';
+import '../i18n.dart';
 
 class ScanScreen extends StatefulWidget {
   final bool active;
@@ -189,7 +190,7 @@ class _ScanScreenState extends State<ScanScreen> {
             label: const Text('Receipt'),
           ),
           IconButton(
-            tooltip: 'Torch',
+            tooltip: tr('Torch'),
             icon: const Icon(Icons.flashlight_on_outlined),
             onPressed: () => _controller.toggleTorch(),
           ),
@@ -245,7 +246,7 @@ class _ScanScreenState extends State<ScanScreen> {
               keyboardType: TextInputType.number,
               onSubmitted: (v) => v.trim().isEmpty ? null : _handle(v.trim()),
               decoration: InputDecoration(
-                hintText: 'Or type the barcode number',
+                hintText: tr('Or type the barcode number'),
                 border: const OutlineInputBorder(),
                 suffixIcon: IconButton(
                   icon: const Icon(Icons.search),

@@ -1,9 +1,10 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:flutter/services.dart';
 
 import '../api.dart';
 import '../main.dart';
 import '../widgets.dart';
+import '../i18n.dart';
 
 /// Connect AI agents (OpenClaw, Hermes, Claude...) to Kasita through its MCP server:
 /// a key per agent, the address, and a ready-made command to copy.
@@ -53,7 +54,7 @@ class _AgentsScreenState extends State<AgentsScreen> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(controller: name, decoration: const InputDecoration(labelText: 'Which agent')),
+              TextField(controller: name, decoration: InputDecoration(labelText: tr('Which agent'))),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 value: readOnly,
@@ -156,7 +157,7 @@ class _AgentsScreenState extends State<AgentsScreen> {
                 ),
                 trailing: s.household!.isOwner
                     ? IconButton(
-                        tooltip: 'Revoke',
+                        tooltip: tr('Revoke'),
                         icon: const Icon(Icons.delete_outline),
                         onPressed: () async {
                           await s.api.deleteApiKey(s.hid, k['id'] as String);

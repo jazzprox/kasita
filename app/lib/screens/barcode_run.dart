@@ -1,10 +1,11 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../api.dart';
 
 import '../main.dart';
 import '../models.dart';
 import '../widgets.dart';
+import '../i18n.dart';
 
 /// Tag every product that has no barcode yet, in one pass.
 ///
@@ -117,7 +118,7 @@ class _BarcodeRunScreenState extends State<BarcodeRunScreen> {
           ..showSnackBar(SnackBar(
             content: Text('$code is already on another product'),
             behavior: SnackBarBehavior.floating,
-            action: SnackBarAction(label: 'Skip this one', onPressed: _skip),
+            action: SnackBarAction(label: tr('Skip this one'), onPressed: _skip),
             duration: const Duration(seconds: 6),
           ));
         return;
@@ -261,8 +262,8 @@ class _BarcodeRunScreenState extends State<BarcodeRunScreen> {
                       controller: _manual,
                       keyboardType: TextInputType.number,
                       onSubmitted: _attach,
-                      decoration: const InputDecoration(
-                        hintText: 'Or type the number',
+                      decoration: InputDecoration(
+                        hintText: tr('Or type the number'),
                         border: OutlineInputBorder(),
                         isDense: true,
                       ),

@@ -1,8 +1,9 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../main.dart';
 import '../nearby/nearby.dart';
 import '../widgets.dart';
+import '../i18n.dart';
 
 /// Settings for the "You're near a store" reminders (Android app only).
 class NearbyScreen extends StatefulWidget {

@@ -1,9 +1,10 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../api.dart';
 import '../main.dart';
 import '../models.dart';
 import '../widgets.dart';
+import '../i18n.dart';
 
 /// The shops this household buys from. Receipts fill in their address, phone and CRIB.
 class StoresScreen extends StatelessWidget {
@@ -107,7 +108,7 @@ class _StoreEditScreenState extends State<StoreEditScreen> {
                 controller: _name,
                 textCapitalization: TextCapitalization.words,
                 validator: (v) => (v == null || v.trim().isEmpty) ? 'Give it a name' : null,
-                decoration: const InputDecoration(labelText: 'Name', border: OutlineInputBorder()),
+                decoration: InputDecoration(labelText: tr('Name'), border: OutlineInputBorder()),
               ),
             ),
             _field(_address, 'Address', help: 'Street first, then the number: Cas Coraweg 78'),
@@ -123,9 +124,9 @@ class _StoreEditScreenState extends State<StoreEditScreen> {
               padding: const EdgeInsets.only(bottom: 12),
               child: DropdownButtonFormField<String?>(
                 initialValue: _kind,
-                decoration: const InputDecoration(
-                  labelText: 'Kind of store',
-                  helperText: 'For the minimarket vs supermarket stat',
+                decoration: InputDecoration(
+                  labelText: tr('Kind of store'),
+                  helperText: tr('For the minimarket vs supermarket stat'),
                   border: OutlineInputBorder(),
                 ),
                 items: [

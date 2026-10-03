@@ -1,8 +1,9 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../api.dart';
 import '../main.dart';
+import '../i18n.dart';
 
 class LoginScreen extends StatefulWidget {
   final String? inviteToken;
@@ -102,13 +103,13 @@ class _LoginScreenState extends State<LoginScreen> {
                   if (_joining) ...[
                     TextField(
                       controller: _invite,
-                      decoration: const InputDecoration(labelText: 'Invite link or code', border: OutlineInputBorder()),
+                      decoration: InputDecoration(labelText: tr('Invite link or code'), border: OutlineInputBorder()),
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: _name,
                       textCapitalization: TextCapitalization.words,
-                      decoration: const InputDecoration(labelText: 'Your name', border: OutlineInputBorder()),
+                      decoration: InputDecoration(labelText: tr('Your name'), border: OutlineInputBorder()),
                     ),
                     const SizedBox(height: 12),
                   ],
@@ -116,7 +117,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     controller: _email,
                     keyboardType: TextInputType.emailAddress,
                     autofillHints: const [AutofillHints.email],
-                    decoration: const InputDecoration(labelText: 'Email', border: OutlineInputBorder()),
+                    decoration: InputDecoration(labelText: tr('Email'), border: OutlineInputBorder()),
                   ),
                   const SizedBox(height: 12),
                   TextField(
@@ -134,7 +135,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     TextField(
                       controller: _server,
                       keyboardType: TextInputType.url,
-                      decoration: const InputDecoration(labelText: 'Server', border: OutlineInputBorder()),
+                      decoration: InputDecoration(labelText: tr('Server'), border: OutlineInputBorder()),
                     ),
                   ],
                   if (_error != null) ...[
@@ -177,7 +178,7 @@ class _NoHouseholdScreenState extends State<NoHouseholdScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Kasita'),
-        actions: [IconButton(icon: const Icon(Icons.logout), tooltip: 'Sign out', onPressed: s.signOut)],
+        actions: [IconButton(icon: const Icon(Icons.logout), tooltip: tr('Sign out'), onPressed: s.signOut)],
       ),
       body: Center(
         child: ConstrainedBox(
@@ -192,7 +193,7 @@ class _NoHouseholdScreenState extends State<NoHouseholdScreen> {
                 const SizedBox(height: 16),
                 TextField(
                   controller: _name,
-                  decoration: const InputDecoration(labelText: 'Household name', border: OutlineInputBorder()),
+                  decoration: InputDecoration(labelText: tr('Household name'), border: OutlineInputBorder()),
                 ),
                 const SizedBox(height: 12),
                 FilledButton(

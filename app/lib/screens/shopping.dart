@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:share_plus/share_plus.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
@@ -12,6 +12,7 @@ import '../spoken_list.dart';
 import '../models.dart';
 import '../nearby/nearby.dart';
 import '../widgets.dart';
+import '../i18n.dart';
 
 class ShoppingScreen extends StatefulWidget {
   const ShoppingScreen({super.key});
@@ -190,6 +191,7 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
 
   List<Map<String, dynamic>>? _stores;
   Map<String, String> _hints = {}; // item id -> "1.20 cheaper at Mangusa (last 5.95 vs 7.15)"
+  Map<String, String> _online = {}; // item id -> "Mangusa online 10.80 (on sale)"
   int _pending = 0; // changes waiting to be sent
   Timer? _retry;
 
@@ -268,6 +270,20 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
         };
       });
       refreshNearby(s.api, s.hid, s.stores, prices: prices); // what the store reminders use
+    } catch (_) {}
+    try {
+      final market = await s.api.shoppingMarket(s.hid);
+      if (!mounted) return;
+      final cur = s.household!.currency;
+      setState(() {
+        _online = {
+          for (final e in market.entries)
+            if (e.value['stale'] != true && e.value['in_stock'] == true)
+              e.key:
+                  '${(e.value['store'] as String).split(' ').first} online $cur ${double.parse('${e.value['price']}').toStringAsFixed(2)}'
+                  '${e.value['on_sale'] == true ? ' (on sale)' : ''}',
+        };
+      });
     } catch (_) {}
   }
 
@@ -475,7 +491,7 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
         title: const Text('Shopping list'),
         actions: [
           PopupMenuButton<String>(
-            tooltip: 'Sort',
+            tooltip: tr('Sort'),
             icon: const Icon(Icons.sort),
             onSelected: _setSort,
             itemBuilder: (_) => [
@@ -484,12 +500,12 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
           ),
           if (open.isNotEmpty)
             IconButton(
-              tooltip: 'Share the list (WhatsApp, messages...)',
+              tooltip: tr('Share the list (WhatsApp, messages...)'),
               icon: const Icon(Icons.share_outlined),
               onPressed: () => SharePlus.instance.share(ShareParams(text: _asText(open))),
             ),
           IconButton(
-            tooltip: 'Add everything that is running low',
+            tooltip: tr('Add everything that is running low'),
             icon: const Icon(Icons.playlist_add),
             onPressed: () async {
               if (_offline) return toast(context, 'Needs a connection');
@@ -500,7 +516,7 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
           ),
           if (done.isNotEmpty)
             IconButton(
-              tooltip: 'Remove ticked items',
+              tooltip: tr('Remove ticked items'),
               icon: const Icon(Icons.cleaning_services_outlined),
               onPressed: () async {
                 if (_offline) return toast(context, 'Needs a connection');
@@ -519,13 +535,13 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
               textInputAction: TextInputAction.done,
               onSubmitted: (_) => _addText(),
               decoration: InputDecoration(
-                hintText: 'Add items: 2x milk, bread',
+                hintText: tr('Add items: 2x milk, bread'),
                 border: const OutlineInputBorder(),
                 suffixIcon: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     IconButton(
-                      tooltip: 'Say it: "milk, two breads and dish soap"',
+                      tooltip: tr('Say it: "milk, two breads and dish soap"'),
                       icon: Icon(_listening ? Icons.mic : Icons.mic_none, color: _listening ? Colors.red : null),
                       onPressed: _voice,
                     ),
@@ -591,8 +607,8 @@ class _ShoppingScreenState extends State<ShoppingScreen> {
 
   Widget? _subtitle(ShoppingItem i) {
     final first = i.auto ? 'running low' : i.note;
-    final hint = i.done ? null : _hints[i.id];
-    if (hint == null) return first == null ? null : Text(first);
+    final hint = i.done ? null : [_hints[i.id], _online[i.id]].whereType<String>().join('\n');
+    if (hint == null || hint.isEmpty) return first == null ? null : Text(first);
     final hintText = Text(hint, style: TextStyle(color: Theme.of(context).colorScheme.tertiary, fontSize: 12));
     if (first == null) return hintText;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(first), hintText]);

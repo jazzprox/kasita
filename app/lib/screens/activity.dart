@@ -1,9 +1,9 @@
-import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../api.dart';
 import '../main.dart';
 import '../widgets.dart';
+import '../i18n.dart';
 
 /// Who did what in the household: bought, used, opened, put on the list, scanned a receipt.
 class ActivityScreen extends StatefulWidget {
@@ -14,7 +14,7 @@ class ActivityScreen extends StatefulWidget {
 
 class _ActivityScreenState extends State<ActivityScreen> {
   List<Map<String, dynamic>>? _feed;
-  static final _when = DateFormat('d MMM, HH:mm');
+  static const _when = LDateFormat('d MMM, HH:mm');
 
   static const _icons = {
     'purchase': Icons.add_shopping_cart,

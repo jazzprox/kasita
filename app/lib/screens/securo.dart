@@ -1,10 +1,11 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
 import '../api.dart';
 import '../main.dart';
 import '../models.dart';
 import '../widgets.dart';
 import 'receipts.dart' show money;
+import '../i18n.dart';
 
 /// Connect Securo (the finance app) so receipts can be matched to card payments.
 class SecuroScreen extends StatefulWidget {
@@ -85,21 +86,21 @@ class _SecuroScreenState extends State<SecuroScreen> {
                 ] else if (s.household!.isOwner) ...[
                   TextField(
                     controller: _url,
-                    decoration: const InputDecoration(labelText: 'Securo address', border: OutlineInputBorder()),
+                    decoration: InputDecoration(labelText: tr('Securo address'), border: OutlineInputBorder()),
                   ),
                   const SizedBox(height: 12),
                   TextField(
                     controller: _email,
                     keyboardType: TextInputType.emailAddress,
-                    decoration: const InputDecoration(labelText: 'Securo email', border: OutlineInputBorder()),
+                    decoration: InputDecoration(labelText: tr('Securo email'), border: OutlineInputBorder()),
                   ),
                   const SizedBox(height: 12),
                   TextField(
                     controller: _password,
                     obscureText: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Securo password',
-                      helperText: 'Used once to sign in; Kasita keeps only Securo\'s access token',
+                    decoration: InputDecoration(
+                      labelText: tr('Securo password'),
+                      helperText: tr('Used once to sign in; Kasita keeps only Securo\'s access token'),
                       border: OutlineInputBorder(),
                     ),
                   ),

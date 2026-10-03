@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 
+import 'i18n.dart';
 import 'screens/home.dart';
 import 'screens/login.dart';
 import 'state.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await initI18n(); // the saved (or device) language, before the first frame
   final state = AppState();
   runApp(KasitaApp(state: state));
   state.start();
@@ -26,12 +29,17 @@ class KasitaApp extends StatelessWidget {
     const seed = Color(0xFF2E7D5B); // a kitchen-herb green
     return Kasita(
       state: state,
-      child: MaterialApp(
-        title: 'Kasita',
-        debugShowCheckedModeBanner: false,
-        theme: ThemeData(colorSchemeSeed: seed, useMaterial3: true),
-        darkTheme: ThemeData(colorSchemeSeed: seed, brightness: Brightness.dark, useMaterial3: true),
-        home: const _Gate(),
+      // switching language rebuilds everything: the key makes the whole app start over in the new language
+      child: ValueListenableBuilder<String>(
+        valueListenable: appLang,
+        builder: (context, lang, _) => MaterialApp(
+          key: ValueKey(lang),
+          title: 'Kasita',
+          debugShowCheckedModeBanner: false,
+          theme: ThemeData(colorSchemeSeed: seed, useMaterial3: true),
+          darkTheme: ThemeData(colorSchemeSeed: seed, brightness: Brightness.dark, useMaterial3: true),
+          home: const _Gate(),
+        ),
       ),
     );
   }

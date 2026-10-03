@@ -1,9 +1,9 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
-import 'package:intl/intl.dart' show DateFormat;
+import 'package:flutter/material.dart' hide Text;
 
 import 'models.dart';
+import 'i18n.dart';
 
 /// What one product cost over time: a line per store, by the day it was bought.
 /// Drawn by hand (no chart package): a few dozen points at most.
@@ -47,8 +47,8 @@ class PriceChart extends StatelessWidget {
     final first = l.first.unitPrice, last = l.last.unitPrice;
     if (first <= 0) return null;
     final pct = ((last - first) / first * 100).round();
-    if (pct == 0) return 'Same price at ${best.first.key} since ${DateFormat('d MMM').format(l.first.on)}';
-    return '${pct > 0 ? 'Up' : 'Down'} ${pct.abs()}% at ${best.first.key} since ${DateFormat('d MMM').format(l.first.on)}';
+    if (pct == 0) return 'Same price at ${best.first.key} since ${LDateFormat('d MMM').format(l.first.on)}';
+    return '${pct > 0 ? 'Up' : 'Down'} ${pct.abs()}% at ${best.first.key} since ${LDateFormat('d MMM').format(l.first.on)}';
   }
 
   @override
@@ -154,7 +154,7 @@ class _ChartPainter extends CustomPainter {
     hiLabel.paint(canvas, Offset(left - hiLabel.width - 6, y(hi) - hiLabel.height / 2));
     loLabel.paint(canvas, Offset(left - loLabel.width - 6, y(lo) - loLabel.height / 2));
 
-    final fmt = DateFormat(DateTime.fromMillisecondsSinceEpoch(t0.toInt()).year ==
+    final fmt = LDateFormat(DateTime.fromMillisecondsSinceEpoch(t0.toInt()).year ==
             DateTime.fromMillisecondsSinceEpoch(t1.toInt()).year
         ? 'd MMM'
         : 'MMM yy');

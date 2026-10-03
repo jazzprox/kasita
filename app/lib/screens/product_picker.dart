@@ -1,9 +1,10 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../main.dart';
 import '../models.dart';
 import '../widgets.dart';
+import '../i18n.dart';
 
 /// Pick one of the household's products. With [barcodeLessFirst], products that
 /// have no barcode yet (typically created from a receipt) are listed on top.
@@ -54,7 +55,7 @@ class _ProductPickerState extends State<ProductPicker> {
           Padding(
             padding: const EdgeInsets.all(12),
             child: SearchBar(
-              hintText: widget.hint ?? 'Search products',
+              hintText: tr(widget.hint ?? 'Search products'),
               leading: const Icon(Icons.search),
               autoFocus: true,
               onChanged: (v) => setState(() => _q = v),
@@ -179,7 +180,7 @@ class _ScanOneBarcodeScreenState extends State<ScanOneBarcodeScreen> {
               keyboardType: TextInputType.number,
               onSubmitted: (v) => v.trim().isEmpty ? null : _finish(v),
               decoration: InputDecoration(
-                hintText: 'Or type the barcode number',
+                hintText: tr('Or type the barcode number'),
                 border: const OutlineInputBorder(),
                 suffixIcon: IconButton(
                   icon: const Icon(Icons.check),
