@@ -61,6 +61,24 @@ class Product {
   final double? runsOutInDays; // forecast from usage; null = not enough history
   final String? photoSource; // 'yours' | 'database' | null
   final bool canRestorePhoto;
+  final double? sizeAmount; // what one unit holds, in sizeUnit
+  final String? sizeUnit; // g | ml | pcs
+  final String? nutriscore; // a..e
+  final int? nova; // 1..4 (4 = ultra-processed)
+  final Map<String, dynamic>? nutrients; // per 100 g/ml
+  final bool weighed; // keyed by a deli/scale barcode: sold by weight
+
+  /// "1.5 l", "500 g", "12 pcs"; null when unknown.
+  String? get sizeText {
+    final a = sizeAmount;
+    if (a == null || sizeUnit == null) return null;
+    String n(double v) => v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(2).replaceAll(RegExp(r'0+$'), '');
+    return switch (sizeUnit) {
+      'g' => a >= 1000 ? '${n(a / 1000)} kg' : '${n(a)} g',
+      'ml' => a >= 1000 ? '${n(a / 1000)} l' : '${n(a)} ml',
+      _ => '${n(a)} pcs',
+    };
+  }
 
   Product.fromJson(Map<String, dynamic> j)
     : id = j['id'],
@@ -80,7 +98,13 @@ class Product {
       openDays = j['open_days'],
       runsOutInDays = _numOrNull(j['runs_out_in_days']),
       photoSource = j['photo_source'],
-      canRestorePhoto = j['can_restore_photo'] ?? false;
+      canRestorePhoto = j['can_restore_photo'] ?? false,
+      sizeAmount = _numOrNull(j['size_amount']),
+      sizeUnit = j['size_unit'],
+      nutriscore = j['nutriscore'],
+      nova = j['nova'],
+      nutrients = j['nutrients'] == null ? null : Map<String, dynamic>.from(j['nutrients']),
+      weighed = j['weighed'] ?? false;
 }
 
 class StockEntry {
@@ -147,6 +171,8 @@ class BarcodeResult {
   final Product? product;
   final bool found;
   final String? source, name, brand, quantityText, imageUrl, categories, category, brandHint;
+  final bool variable; // a deli/scale label: item number + price, not a product code
+  final double? embeddedPrice; // the price printed into a scale label's barcode
   BarcodeResult.fromJson(Map<String, dynamic> j)
     : barcode = j['barcode'],
       product = j['product'] == null ? null : Product.fromJson(j['product']),
@@ -158,7 +184,9 @@ class BarcodeResult {
       imageUrl = j['image_url'],
       categories = j['categories'],
       category = j['category'],
-      brandHint = j['brand_hint'];
+      brandHint = j['brand_hint'],
+      variable = j['variable'] ?? false,
+      embeddedPrice = _numOrNull(j['embedded_price']);
 }
 
 class PricePoint {
@@ -166,12 +194,16 @@ class PricePoint {
   final DateTime on; // bought (the receipt's date)
   final double unitPrice, quantity;
   final String? storeName;
+  final double? perBase; // the same price per kg / l / piece
+  final String? per; // kg | l | each
   PricePoint.fromJson(Map<String, dynamic> j)
     : at = _date(j['at']) ?? DateTime.now(),
       on = _date(j['on']) ?? (_date(j['at']) ?? DateTime.now()).toLocal(),
       unitPrice = _num(j['unit_price']),
       quantity = _num(j['quantity']),
-      storeName = j['store_name'];
+      storeName = j['store_name'],
+      perBase = _numOrNull(j['per_base']),
+      per = j['per'];
 }
 
 class Member {

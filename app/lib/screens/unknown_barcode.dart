@@ -21,14 +21,19 @@ Future<Product?> productForUnknownBarcode(BuildContext context, BarcodeResult r,
         mainAxisSize: MainAxisSize.min,
         children: [
           ListTile(
-            title: Text(r.name ?? 'Barcode ${r.barcode}', style: Theme.of(context).textTheme.titleMedium),
+            title: Text(
+              r.variable ? 'Deli / scale label' : (r.name ?? 'Barcode ${r.barcode}'),
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
             subtitle: Text(
-              r.found
+              r.variable
+                  ? 'Which product is it? Kasita remembers it by its item number, whatever it weighs next time.'
+                  : r.found
                   ? 'New to your household'
                   : 'Not in any product database${r.brandHint == null ? '' : ' · probably ${r.brandHint}'}',
             ),
           ),
-          if (!r.found)
+          if (!r.found && !r.variable)
             ListTile(
               leading: const Icon(Icons.travel_explore),
               title: const Text('Look it up on Google'),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../api.dart';
 import '../main.dart';
@@ -22,6 +23,56 @@ Future<void> planRecipe(BuildContext context, Map<String, dynamic> recipe) async
     if (context.mounted) toast(context, 'Planned for ${dateFmt.format(d)}');
   } on ApiException catch (e) {
     if (context.mounted) toast(context, e.message, error: true);
+  }
+}
+
+/// A recipe from a web page: paste (or share) the link; Kasita reads it and matches the pantry.
+/// Returns the new recipe's id, or null.
+Future<String?> importRecipe(BuildContext context, {String? url}) async {
+  final s = Kasita.read(context);
+  var link = url;
+  if (link == null) {
+    final ctl = TextEditingController();
+    link = await showDialog<String>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Recipe from a link'),
+        content: TextField(
+          controller: ctl,
+          autofocus: true,
+          keyboardType: TextInputType.url,
+          decoration: const InputDecoration(hintText: 'https://…', helperText: 'Any recipe page; most sites work'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(c, ctl.text.trim()), child: const Text('Import')),
+        ],
+      ),
+    );
+  }
+  if (link == null || link.isEmpty || !context.mounted) return null;
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => const AlertDialog(
+      content: Row(
+        children: [CircularProgressIndicator(), SizedBox(width: 20), Expanded(child: Text('Reading the recipe…'))],
+      ),
+    ),
+  );
+  try {
+    final r = await s.api.importRecipe(s.hid, link);
+    if (!context.mounted) return null;
+    Navigator.of(context).pop();
+    final have = (r['ingredients'] as List).where((i) => i['product_id'] != null).length;
+    toast(context, 'Imported "${r['title']}": $have of ${(r['ingredients'] as List).length} ingredients are pantry products');
+    return r['id'] as String;
+  } on ApiException catch (e) {
+    if (context.mounted) {
+      Navigator.of(context).pop();
+      toast(context, e.message, error: true);
+    }
+    return null;
   }
 }
 
@@ -51,13 +102,24 @@ class _RecipesScreenState extends State<RecipesScreen> {
     final t = Theme.of(context);
     return Scaffold(
       appBar: AppBar(title: const Text('Recipes')),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () async {
+          final id = await importRecipe(context);
+          if (id == null || !context.mounted) return;
+          _load();
+          await Navigator.of(context).push(MaterialPageRoute(builder: (_) => RecipeScreen(recipeId: id)));
+          if (mounted) _load();
+        },
+        icon: const Icon(Icons.link),
+        label: const Text('From a link'),
+      ),
       body: _all == null
           ? const Center(child: CircularProgressIndicator())
           : _all!.isEmpty
           ? const EmptyState(
               icon: Icons.menu_book_outlined,
               title: 'No recipes yet',
-              message: 'Save one from "What can I cook?" on the Pantry screen.',
+              message: 'Import one from a recipe page (From a link), or save one from "What can I cook?" on the Pantry screen.',
             )
           : RefreshIndicator(
               onRefresh: _load,
@@ -205,6 +267,12 @@ class _RecipeScreenState extends State<RecipeScreen> {
       appBar: AppBar(
         title: Text(r?['title'] ?? 'Recipe'),
         actions: [
+          if (r != null && r['source_url'] != null)
+            IconButton(
+              tooltip: 'Open the recipe page',
+              icon: const Icon(Icons.open_in_new),
+              onPressed: () => launchUrl(Uri.parse(r['source_url']), mode: LaunchMode.externalApplication),
+            ),
           if (r != null)
             IconButton(
               tooltip: 'Delete',
@@ -247,9 +315,36 @@ class _RecipeScreenState extends State<RecipeScreen> {
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                if ((r['minutes'] ?? 0) > 0) Text('${r['minutes']} minutes', style: t.textTheme.bodySmall),
+                if ((r['minutes'] ?? 0) > 0 || r['servings'] != null)
+                  Text(
+                    [
+                      if ((r['minutes'] ?? 0) > 0) '${r['minutes']} minutes',
+                      if (r['servings'] != null) '${r['servings']}',
+                    ].join(' · '),
+                    style: t.textTheme.bodySmall,
+                  ),
                 const SizedBox(height: 8),
-                Text('Ingredients', style: t.textTheme.titleMedium),
+                Row(
+                  children: [
+                    Expanded(child: Text('Ingredients', style: t.textTheme.titleMedium)),
+                    if ((r['ingredients'] as List).any((i) => i['have'] != true))
+                      TextButton.icon(
+                        onPressed: () async {
+                          try {
+                            final added = await s.api.missingToList(s.hid, widget.recipeId);
+                            s.changed();
+                            if (context.mounted) {
+                              toast(context, added.isEmpty ? 'Already on the list' : 'On the list: ${added.join(', ')}');
+                            }
+                          } on ApiException catch (e) {
+                            if (context.mounted) toast(context, e.message, error: true);
+                          }
+                        },
+                        icon: const Icon(Icons.playlist_add),
+                        label: const Text('Missing to list'),
+                      ),
+                  ],
+                ),
                 for (final i in r['ingredients'] as List)
                   ListTile(
                     contentPadding: EdgeInsets.zero,
@@ -258,7 +353,7 @@ class _RecipeScreenState extends State<RecipeScreen> {
                       i['have'] == true ? Icons.check_circle : Icons.radio_button_unchecked,
                       color: i['have'] == true ? t.colorScheme.primary : t.colorScheme.outline,
                     ),
-                    title: Text(i['name']),
+                    title: Text(i['amount'] == null ? '${i['name']}' : '${i['amount']} ${i['name']}'),
                     subtitle: Text(i['product_id'] == null ? 'to buy' : (i['have'] == true ? 'at home' : 'ran out')),
                   ),
                 const SizedBox(height: 16),

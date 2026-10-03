@@ -8,6 +8,7 @@ import '../nearby/nearby.dart';
 import '../updates/update_ui.dart';
 import '../widgets.dart';
 import 'activity.dart';
+import 'agents.dart';
 import 'bills.dart';
 import 'chatgpt.dart';
 import 'fun_stats.dart';
@@ -205,6 +206,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: const Text('ChatGPT'),
             subtitle: const Text('Reads receipts with your ChatGPT subscription'),
             onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ChatGPTScreen())),
+          ),
+          ListTile(
+            leading: const Icon(Icons.smart_toy_outlined),
+            title: const Text('AI agents'),
+            subtitle: const Text('Let OpenClaw, Hermes or Claude use Kasita (MCP)'),
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AgentsScreen())),
           ),
           ListTile(
             leading: const Icon(Icons.account_balance_wallet_outlined),

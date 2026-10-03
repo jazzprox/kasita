@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../api.dart';
 import '../main.dart';
+import '../nutri.dart';
 import '../widgets.dart';
 
 /// What groceries cost: priced purchases (receipts, or prices typed when buying),
@@ -17,6 +18,7 @@ class _SpendingScreenState extends State<SpendingScreen> {
   Map<String, dynamic>? _s;
   Map<String, dynamic>? _month;
   List<Map<String, dynamic>> _rises = [];
+  Map<String, dynamic>? _health;
 
   @override
   void initState() {
@@ -31,11 +33,16 @@ class _SpendingScreenState extends State<SpendingScreen> {
       final r = await s.api.spending(s.hid, _days);
       final m = await s.api.month(s.hid);
       final rises = await s.api.priceChanges(s.hid, _days);
+      Map<String, dynamic>? health;
+      try {
+        health = await s.api.nutrition(s.hid, _days);
+      } catch (_) {}
       if (mounted) {
         setState(() {
           _s = r;
           _month = m;
           _rises = rises;
+          _health = health;
         });
       }
     } on ApiException catch (e) {
@@ -129,6 +136,82 @@ class _SpendingScreenState extends State<SpendingScreen> {
     );
   }
 
+  /// Basket health: what share of the rated spending went on each Nutri-Score grade.
+  Widget _healthCard(Map<String, dynamic> h, String cur) {
+    final t = Theme.of(context);
+    final grades = [for (final g in h['by_grade'] as List) if (g['grade'] != 'unrated') g];
+    final top = h['top_d_e'] as List;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 20, 16, 4),
+          child: Text('Basket health', style: t.textTheme.titleMedium),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Text(
+            'Nutri-Score of what you bought (${h['rated_pct']}% of spending has a score; '
+            'only barcoded food can be rated)',
+            style: t.textTheme.bodySmall,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: SizedBox(
+              height: 22,
+              child: Row(
+                children: [
+                  for (final g in grades)
+                    if ((g['pct'] ?? 0) > 0)
+                      Expanded(
+                        flex: g['pct'] as int,
+                        child: Container(
+                          color: NutriScoreBadge.colors[g['grade']],
+                          alignment: Alignment.center,
+                          child: (g['pct'] as int) >= 8
+                              ? Text(
+                                  '${(g['grade'] as String).toUpperCase()} ${g['pct']}%',
+                                  style: TextStyle(
+                                    color: g['grade'] == 'c' ? Colors.black87 : Colors.white,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                )
+                              : null,
+                        ),
+                      ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        if (h['ultra_processed_pct'] != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: Text('Ultra-processed (NOVA 4): ${h['ultra_processed_pct']}% of what has a NOVA group'),
+          ),
+        if (top.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: Text('Biggest D / E buys', style: t.textTheme.labelLarge),
+          ),
+          for (final x in top)
+            ListTile(
+              dense: true,
+              leading: NutriScoreBadge(x['nutriscore'] as String, size: 22),
+              title: Text('${x['name']}'),
+              subtitle: x['sugars'] == null ? null : Text('sugar ${x['sugars']} g per 100'),
+              trailing: Text('$cur ${_n(x['amount']).toStringAsFixed(2)}'),
+            ),
+        ],
+      ],
+    );
+  }
+
   Widget _bars(String title, List rows, String cur, double total) {
     final t = Theme.of(context);
     return Column(
@@ -212,6 +295,7 @@ class _SpendingScreenState extends State<SpendingScreen> {
             ),
             _bars('By category', s['by_category'] as List, s['currency'], _n(s['total'])),
             _bars('By store', s['by_store'] as List, s['currency'], _n(s['total'])),
+            if (_health != null && (_health!['rated_pct'] ?? 0) > 0) _healthCard(_health!, s['currency']),
             if (_rises.isNotEmpty) ...[
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 20, 16, 4),

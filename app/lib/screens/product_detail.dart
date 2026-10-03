@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import '../api.dart';
 
 import '../main.dart';
+import '../nutri.dart';
 import '../price_chart.dart';
 import '../models.dart';
 import '../widgets.dart';
@@ -22,6 +23,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   Product? _p;
   List<StockEntry> _entries = [];
   List<PricePoint> _prices = [];
+  List<Map<String, dynamic>> _compare = const [];
   int _seen = -1;
 
   Future<void> _share() async {
@@ -209,8 +211,13 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     final p = await s.api.product(s.hid, widget.productId);
     final stock = await s.api.stock(s.hid);
     final prices = await s.api.prices(s.hid, widget.productId);
+    List<Map<String, dynamic>> compare = const [];
+    try {
+      compare = await s.api.compareSizes(s.hid, widget.productId);
+    } catch (_) {}
     if (!mounted) return;
     setState(() {
+      _compare = compare;
       _p = p;
       _entries = stock.where((x) => x.product.id == p.id).expand((x) => x.entries).toList();
       _prices = prices;
@@ -298,11 +305,37 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       ),
                     Text('${fmtQty(p.inStock)} ${p.unit} at home', style: t.textTheme.titleLarge),
                     if (p.minStock > 0) Text('Keep at least ${fmtQty(p.minStock)}'),
+                    if (p.sizeText != null || p.weighed)
+                      Text(
+                        p.weighed ? 'Sold by weight (deli / scale label)' : 'Pack: ${p.sizeText}',
+                        style: t.textTheme.bodySmall,
+                      ),
                   ],
                 ),
               ),
             ],
           ),
+          if (p.nutriscore != null || p.nova != null || p.nutrients != null) ...[
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                if (p.nutriscore != null) ...[NutriScoreBadge(p.nutriscore!), const SizedBox(width: 10)],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (p.nova != null) Text(novaText(p.nova!), style: t.textTheme.labelLarge),
+                      if (p.nutrients != null)
+                        Text(
+                          nutrientsText(p.nutrients!, liquid: p.sizeUnit == 'ml'),
+                          style: t.textTheme.bodySmall,
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 16),
           Wrap(
             spacing: 8,
@@ -414,10 +447,42 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             ListTile(
               contentPadding: EdgeInsets.zero,
               dense: true,
-              title: Text('${s.household!.currency} ${pr.unitPrice.toStringAsFixed(2)}'),
+              title: Text(
+                '${s.household!.currency} ${pr.unitPrice.toStringAsFixed(2)}'
+                '${pr.perBase != null && !(pr.per == 'kg' && p.unit == 'kg') ? '  ·  ${pr.perBase!.toStringAsFixed(2)} per ${pr.per == 'each' ? 'piece' : pr.per}' : ''}',
+              ),
               subtitle: Text(pr.storeName ?? 'unknown store'),
               trailing: Text(dateFmtYear.format(pr.on)),
             ),
+          if (_compare.length > 1) ...[
+            const SizedBox(height: 16),
+            Text('Same kind, per ${_compare.first['per'] == 'each' ? 'piece' : _compare.first['per']}',
+                style: t.textTheme.titleMedium),
+            Text('Other sizes and brands you buy, cheapest first (latest price)', style: t.textTheme.bodySmall),
+            for (final c in _compare)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                leading: Icon(
+                  c == _compare.first ? Icons.star : Icons.scale_outlined,
+                  color: c == _compare.first ? t.colorScheme.primary : null,
+                ),
+                title: Text(
+                  '${c['name']}${c['this'] == true ? ' (this one)' : ''}',
+                  style: c['this'] == true ? const TextStyle(fontWeight: FontWeight.w600) : null,
+                ),
+                subtitle: Text('${s.household!.currency} ${double.parse('${c['price']}').toStringAsFixed(2)} at ${c['store']}'),
+                trailing: Text(
+                  '${double.parse('${c['per_base']}').toStringAsFixed(2)} / ${c['per'] == 'each' ? 'pc' : c['per']}',
+                  style: c == _compare.first ? TextStyle(color: t.colorScheme.primary, fontWeight: FontWeight.w600) : null,
+                ),
+                onTap: c['this'] == true
+                    ? null
+                    : () => Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => ProductDetailScreen(productId: c['product_id'] as String)),
+                      ),
+              ),
+          ],
           if (p.shareable) ...[
             const SizedBox(height: 16),
             Card(

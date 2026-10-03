@@ -88,10 +88,23 @@ class _ScanScreenState extends State<ScanScreen> {
                 trailing: ExpiryChip(p.nextBestBefore),
               ),
               const SizedBox(height: 12),
+              if (r.variable)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    'Scale label${r.embeddedPrice == null ? '' : ': ${Kasita.read(context).household!.currency} '
+                        '${r.embeddedPrice!.toStringAsFixed(2)}'}',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
               FilledButton.icon(
                 onPressed: () async {
                   Navigator.pop(sheet);
-                  await showPurchaseSheet(context, p);
+                  if (r.variable) {
+                    await showWeighedPurchaseSheet(context, p, labelTotal: r.embeddedPrice);
+                  } else {
+                    await showPurchaseSheet(context, p);
+                  }
                 },
                 icon: const Icon(Icons.add_shopping_cart),
                 label: const Text('Bought'),

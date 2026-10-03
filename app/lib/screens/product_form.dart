@@ -23,7 +23,27 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
   );
   late final _category = TextEditingController(text: widget.product?.category ?? widget.prefill?.category ?? '');
   List<String> _categories = const [];
-  late final _unit = TextEditingController(text: widget.product?.unit ?? 'pcs');
+  late final _unit = TextEditingController(
+    text: widget.product?.unit ?? (widget.prefill?.variable == true ? 'kg' : 'pcs'),
+  );
+  // pack size, shown in the friendliest unit (1500 ml -> 1.5 l)
+  late String _sizeUnit = _initialSizeUnit();
+  late final _size = TextEditingController(text: _initialSize());
+
+  String _initialSizeUnit() {
+    final p = widget.product;
+    if (p?.sizeAmount == null) return 'g';
+    if (p!.sizeUnit == 'g') return p.sizeAmount! >= 1000 ? 'kg' : 'g';
+    if (p.sizeUnit == 'ml') return p.sizeAmount! >= 1000 ? 'l' : 'ml';
+    return 'pcs';
+  }
+
+  String _initialSize() {
+    final a = widget.product?.sizeAmount;
+    if (a == null) return '';
+    final v = (_sizeUnit == 'kg' || _sizeUnit == 'l') ? a / 1000 : a;
+    return v == v.roundToDouble() ? v.toStringAsFixed(0) : '$v';
+  }
   late final _min = TextEditingController(text: widget.product == null ? '0' : fmtQty(widget.product!.minStock));
   late final _shelf = TextEditingController(text: widget.product?.shelfLifeDays?.toString() ?? '');
   late final _openDays = TextEditingController(text: widget.product?.openDays?.toString() ?? '');
@@ -60,6 +80,15 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       'open_days': int.tryParse(_openDays.text.trim()),
       'default_location_id': _location,
     };
+    final size = double.tryParse(_size.text.trim().replaceAll(',', '.'));
+    if (size != null && size > 0) {
+      body['size_amount'] = (_sizeUnit == 'kg' || _sizeUnit == 'l') ? size * 1000 : size;
+      body['size_unit'] = switch (_sizeUnit) {
+        'kg' || 'g' => 'g',
+        'l' || 'ml' => 'ml',
+        _ => 'pcs',
+      };
+    }
     try {
       final Product saved;
       if (_editing) {
@@ -150,6 +179,34 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                       helperText: 'Below this: onto the list',
                       border: OutlineInputBorder(),
                     ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: TextFormField(
+                    controller: _size,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                      labelText: 'Pack size',
+                      helperText: 'For prices per kg / litre (empty: read from the barcode)',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    initialValue: _sizeUnit,
+                    decoration: const InputDecoration(border: OutlineInputBorder()),
+                    items: [
+                      for (final u in const ['g', 'kg', 'ml', 'l', 'pcs']) DropdownMenuItem(value: u, child: Text(u)),
+                    ],
+                    onChanged: (v) => setState(() => _sizeUnit = v ?? 'g'),
                   ),
                 ),
               ],

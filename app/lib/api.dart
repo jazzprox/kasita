@@ -255,6 +255,19 @@ class Api {
   /// Photo of a printed date -> {"date": "YYYY-MM-DD" | null, "printed": text}.
   Future<Map<String, dynamic>> readDate(String hid, Uint8List photo) async =>
       Map<String, dynamic>.from(await upload('${_h(hid)}/stock/read-date', [(photo, 'date.jpg')]));
+
+  /// A deli / scale label photo -> {name, weight_kg, price_per_kg, total, best_before, packed_on}.
+  Future<Map<String, dynamic>> readLabel(String hid, Uint8List photo) async =>
+      Map<String, dynamic>.from(await upload('${_h(hid)}/stock/read-label', [(photo, 'label.jpg')]));
+
+  /// Spending per Nutri-Score grade / NOVA group over the last [days].
+  Future<Map<String, dynamic>> nutrition(String hid, int days) async =>
+      Map<String, dynamic>.from(await get('${_h(hid)}/stock/nutrition', {'days': '$days'}));
+
+  /// Similar products (same category, a shared name word) by their latest price per kg / l / piece.
+  Future<List<Map<String, dynamic>>> compareSizes(String hid, String pid) async => [
+    for (final x in await get('${_h(hid)}/products/$pid/compare') as List) Map<String, dynamic>.from(x),
+  ];
   Future<List<Map<String, dynamic>>> shoppingByStore(String hid) async => [
     for (final g in await get('${_h(hid)}/shopping/by-store') as List) Map<String, dynamic>.from(g),
   ];
@@ -283,6 +296,11 @@ class Api {
   Future<Map<String, dynamic>> saveRecipe(String hid, Map<String, dynamic> body) async =>
       Map<String, dynamic>.from(await post('${_h(hid)}/recipes', body));
   Future<void> deleteRecipe(String hid, String id) => delete('${_h(hid)}/recipes/$id');
+  /// A recipe from a web page (its schema.org data, else ChatGPT reads it).
+  Future<Map<String, dynamic>> importRecipe(String hid, String url) async =>
+      Map<String, dynamic>.from(await post('${_h(hid)}/recipes/import', {'url': url}));
+  Future<List<String>> missingToList(String hid, String id) async =>
+      List<String>.from((await post('${_h(hid)}/recipes/$id/missing-to-list'))['added'] as List);
   Future<Map<String, dynamic>> cooked(String hid, String id, List<Map<String, dynamic>> items) async =>
       Map<String, dynamic>.from(await post('${_h(hid)}/recipes/$id/cooked', {'items': items}));
   Future<List<Map<String, dynamic>>> plan(String hid) async => [
@@ -300,6 +318,10 @@ class Api {
       Product.fromJson(await post('${_h(hid)}/products/$pid/photo/restore'));
   Future<Map<String, dynamic>> createApiKey(String hid, String name, {bool readOnly = false}) async =>
       Map<String, dynamic>.from(await post('${_h(hid)}/api-keys', {'name': name, 'read_only': readOnly}));
+  Future<List<Map<String, dynamic>>> apiKeys(String hid) async => [
+    for (final k in await get('${_h(hid)}/api-keys') as List) Map<String, dynamic>.from(k),
+  ];
+  Future<void> deleteApiKey(String hid, String id) => delete('${_h(hid)}/api-keys/$id');
   Future<void> undoStock(String hid, List<String> eventIds) => post('${_h(hid)}/stock/undo', {'event_ids': eventIds});
   Future<Map<String, dynamic>> consume(String hid, String pid, double qty, {bool spoiled = false}) async =>
       Map<String, dynamic>.from(

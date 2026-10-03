@@ -10,6 +10,7 @@ import 'package:quick_actions/quick_actions.dart';
 import 'pantry.dart';
 import 'pantry_pass.dart';
 import 'receipts.dart';
+import 'recipes.dart';
 import '../api.dart';
 import '../home_widget_sync.dart';
 import '../main.dart';
@@ -53,6 +54,14 @@ class _HomeScreenState extends State<HomeScreen> {
         final receipt = await s.api.uploadReceipt(s.hid, parts);
         if (!mounted) return;
         await Navigator.of(context).push(MaterialPageRoute(builder: (_) => ReceiptReviewScreen(receiptId: receipt.id)));
+      } else if (texts.isNotEmpty &&
+          RegExp(r'https?://\S+').hasMatch(texts.map((t) => t.path).join(' '))) {
+        // a shared web page (a recipe from the browser): import it as a recipe
+        final url = RegExp(r'https?://\S+').firstMatch(texts.map((t) => t.path).join(' '))!.group(0)!;
+        final id = await importRecipe(context, url: url);
+        if (id != null && mounted) {
+          await Navigator.of(context).push(MaterialPageRoute(builder: (_) => RecipeScreen(recipeId: id)));
+        }
       } else if (texts.isNotEmpty) {
         final items = parseSpokenList(texts.map((t) => t.path).join(', ').replaceAll('\n', ', '));
         for (final (qty, name) in items) {
