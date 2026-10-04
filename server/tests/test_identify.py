@@ -86,3 +86,17 @@ def test_photo_source_and_restoring_the_database_photo(client, jazz, tmp_path, m
     assert gone["photo_source"] is None and gone["can_restore_photo"] is True       # removed, still restorable
     plain = client.post(f"{base}/products", json={"name": "Garlic"}, headers=h).json()
     assert client.post(f"{base}/products/{plain['id']}/photo/restore", headers=h).status_code == 409
+
+
+def test_printed_best_before_date_is_returned_only_when_plausible(client, jazz, monkeypatch):
+    from datetime import date, timedelta
+    h, hid = jazz
+    good = (date.today() + timedelta(days=120)).isoformat()
+    for printed, want in ((good, good), (f"{good}T00:00:00", good), (None, None), ("not a date", None),
+                          ("1999-01-01", None),                                         # long past: a misread
+                          ((date.today() + timedelta(days=9000)).isoformat(), None),    # absurdly far ahead
+                          ((date.today() - timedelta(days=3)).isoformat(), (date.today() - timedelta(days=3)).isoformat())):
+        monkeypatch.setattr(ident, "ask_chatgpt", lambda db, hh, jpeg, p=printed: {"name": "Milk 1 l", "category": "Dairy", "best_before": p})
+        out = client.post(f"/api/households/{hid}/products/identify", headers=h,
+                          files={"file": ("p.jpg", photo(), "image/jpeg")}).json()
+        assert out["best_before"] == want, (printed, out)
