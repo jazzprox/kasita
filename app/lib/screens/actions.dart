@@ -84,6 +84,18 @@ Future<bool> showPurchaseSheet(BuildContext context, Product p) async {
   return ok ?? false;
 }
 
+/// Best-before dates ChatGPT read off the photo taken for an unknown barcode (barcode -> date). The first purchase of the
+/// product made from that barcode takes the date, so the box is already filled in.
+final Map<String, DateTime> pendingBestBefore = {};
+
+DateTime? takePendingBestBefore(Product p) {
+  for (final b in p.barcodes) {
+    final d = pendingBestBefore.remove(b);
+    if (d != null) return d;
+  }
+  return null;
+}
+
 class _PurchaseSheet extends StatefulWidget {
   final Product product;
   const _PurchaseSheet({required this.product});
@@ -94,6 +106,7 @@ class _PurchaseSheet extends StatefulWidget {
 class _PurchaseSheetState extends State<_PurchaseSheet> {
   double _qty = 1;
   DateTime? _bestBefore;
+  DateTime? _photoDate; // the date read off the label photo, if that is where _bestBefore came from
   final _price = TextEditingController();
   String? _storeId;
   String? _locationId;
@@ -104,6 +117,8 @@ class _PurchaseSheetState extends State<_PurchaseSheet> {
     super.initState();
     final days = widget.product.shelfLifeDays;
     if (days != null) _bestBefore = DateUtils.dateOnly(DateTime.now()).add(Duration(days: days));
+    _photoDate = takePendingBestBefore(widget.product);
+    if (_photoDate != null) _bestBefore = _photoDate; // a printed date beats the shelf-life estimate
     _locationId = widget.product.defaultLocationId;
   }
 
@@ -184,6 +199,7 @@ class _PurchaseSheetState extends State<_PurchaseSheet> {
             title: Text(
               _bestBefore == null ? 'No best-before date' : 'Best before ${dateFmtYear.format(_bestBefore!)}',
             ),
+            subtitle: _photoDate != null && _bestBefore == _photoDate ? const Text('read from your photo') : null,
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [

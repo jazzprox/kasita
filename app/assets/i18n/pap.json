@@ -837,5 +837,7 @@
 "off": "paga",
 "on": "aktivá",
 "Language": "Idioma",
-"Texts the app does not know in your language stay in English.": "Teksto ku e app no konosé den bo idioma ta keda na Ingles."
+"Texts the app does not know in your language stay in English.": "Teksto ku e app no konosé den bo idioma ta keda na Ingles.",
+"read from your photo": "lesa for di bo potrèt",
+"Also read the best-before date: {}": "Tambe a lesa e fecha di vensementu: {}"
 }

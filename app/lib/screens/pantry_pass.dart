@@ -101,10 +101,15 @@ class _PantryPassScreenState extends State<PantryPassScreen> {
     final tally = _tallies.putIfAbsent(p.id, () => _Tally(p));
     String flash;
     if (dir > 0) {
-      final entry = await s.api.purchaseEntry(s.hid, {'product_id': p.id, 'quantity': 1});
+      final printed = takePendingBestBefore(p); // read off the photo of an unknown pack, if there was one
+      final entry = await s.api.purchaseEntry(s.hid, {
+        'product_id': p.id,
+        'quantity': 1,
+        if (printed != null) 'best_before': printed.toIso8601String().substring(0, 10),
+      });
       if (entry['event_id'] != null) tally.events.add((1, entry['event_id'] as String));
       tally.batches.add(entry['id'] as String);
-      flash = '+1 ${p.name}';
+      flash = printed == null ? '+1 ${p.name}' : '+1 ${p.name} (best before ${dateFmtYear.format(printed)})';
     } else {
       final res = await s.api.consume(s.hid, p.id, 1);
       final ids = List<String>.from(res['event_ids'] ?? const []);

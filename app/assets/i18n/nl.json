@@ -837,5 +837,7 @@
 "off": "uit",
 "on": "aan",
 "Language": "Taal",
-"Texts the app does not know in your language stay in English.": "Teksten die de app niet in jouw taal kent, blijven Engels."
+"Texts the app does not know in your language stay in English.": "Teksten die de app niet in jouw taal kent, blijven Engels.",
+"read from your photo": "van je foto afgelezen",
+"Also read the best-before date: {}": "Ook de houdbaarheidsdatum gelezen: {}"
 }

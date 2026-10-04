@@ -6,6 +6,7 @@ import '../api.dart';
 import '../main.dart';
 import '../models.dart';
 import '../widgets.dart';
+import 'actions.dart';
 import 'product_form.dart';
 import 'product_picker.dart';
 import '../i18n.dart';
@@ -130,6 +131,11 @@ Future<BarcodeResult?> _fromPhoto(BuildContext context, BarcodeResult r) async {
     Navigator.of(context).pop(); // the progress dialog
     if (got['found'] != true) {
       toast(context, "Couldn't read the label. Name it yourself; the photo is kept.");
+    }
+    final printed = DateTime.tryParse('${got['best_before'] ?? ''}');
+    if (printed != null) {
+      pendingBestBefore[r.barcode] = DateUtils.dateOnly(printed);
+      toast(context, 'Also read the best-before date: ${dateFmtYear.format(printed)}');
     }
     return BarcodeResult.fromJson({
       'barcode': r.barcode,
